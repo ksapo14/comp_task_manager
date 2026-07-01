@@ -1,0 +1,199 @@
+@import "highlight.js/styles/github-dark.css";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-zinc-200 dark:border-zinc-800;
+  }
+
+  body {
+    @apply m-0 min-w-80 bg-canvas font-sans text-ink antialiased transition-colors dark:bg-zinc-950 dark:text-zinc-100;
+  }
+
+  ::selection {
+    @apply bg-teal-200 text-teal-950;
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+
+  button,
+  a {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+@layer components {
+  .field-label {
+    @apply mb-1.5 block text-xs font-semibold uppercase tracking-wider text-zinc-500;
+  }
+
+  .select-field {
+    @apply h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-900;
+  }
+
+  .textarea-field {
+    @apply w-full rounded-xl border border-zinc-200 bg-white p-3 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-900;
+  }
+
+  .prose-compass {
+    @apply text-sm leading-7 text-zinc-700 dark:text-zinc-300;
+  }
+
+  .prose-compass h1,
+  .prose-compass h2,
+  .prose-compass h3 {
+    @apply mb-3 mt-6 font-semibold text-zinc-950 dark:text-white;
+  }
+
+  .prose-compass h1 {
+    @apply text-2xl;
+  }
+
+  .prose-compass h2 {
+    @apply text-xl;
+  }
+
+  .prose-compass code:not(pre code) {
+    @apply rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-xs dark:bg-zinc-800;
+  }
+
+  .prose-compass pre {
+    @apply my-4 overflow-x-auto rounded-xl bg-zinc-950 p-4;
+  }
+
+  .prose-compass ul {
+    @apply my-3 list-disc pl-5;
+  }
+}
+
+@keyframes pulse-ring {
+  0%, 100% { opacity: .25; transform: scale(.98); }
+  50% { opacity: .6; transform: scale(1.02); }
+}
+
+.alarm-ring {
+  animation: pulse-ring 1s ease-in-out infinite;
+}
+
+@keyframes page-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+@keyframes pop-in {
+  0% { opacity: 0; transform: scale(.72); }
+  65% { opacity: 1; transform: scale(1.12); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes expand-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes modal-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes modal-panel-in {
+  from { opacity: 0; transform: translateY(-18px) scale(.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes completion-wash {
+  from { transform: translateX(-102%); }
+  to { transform: translateX(0); }
+}
+
+.animate-page-in {
+  animation: page-in .38s cubic-bezier(.22, 1, .36, 1) both;
+}
+
+.animate-pop-in {
+  animation: pop-in .28s cubic-bezier(.22, 1, .36, 1) both;
+}
+
+.animate-expand-in {
+  animation: expand-in .24s ease-out both;
+}
+
+.modal-backdrop {
+  animation: modal-backdrop-in .2s ease-out both;
+}
+
+.modal-panel {
+  animation: modal-panel-in .3s cubic-bezier(.22, 1, .36, 1) both;
+}
+
+.completion-wash {
+  animation: completion-wash .42s cubic-bezier(.22, 1, .36, 1) both;
+}
+
+.skeleton {
+  background: linear-gradient(90deg, rgb(228 228 231) 25%, rgb(244 244 245) 50%, rgb(228 228 231) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.35s linear infinite;
+}
+
+.dark .skeleton {
+  background: linear-gradient(90deg, rgb(39 39 42) 25%, rgb(63 63 70) 50%, rgb(39 39 42) 75%);
+  background-size: 200% 100%;
+}
+
+.surface-card {
+  transition: border-color .2s ease, box-shadow .25s ease, transform .25s ease;
+}
+
+.surface-card:hover {
+  box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 18px 44px rgba(0,0,0,.07);
+}
+
+.interactive-button {
+  transition: transform .16s ease, box-shadow .2s ease, background-color .2s ease, color .2s ease;
+}
+
+.interactive-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.interactive-button:active:not(:disabled) {
+  transform: translateY(1px) scale(.98);
+}
+
+.dragging-card {
+  opacity: .55;
+  transform: rotate(1.5deg) scale(.98);
+}
+
+.drop-target {
+  box-shadow: inset 0 0 0 2px rgb(13 148 136 / .65);
+  background-color: rgb(240 253 250 / .7);
+}
+
+.dark .drop-target {
+  background-color: rgb(19 78 74 / .25);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}

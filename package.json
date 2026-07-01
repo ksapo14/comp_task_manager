@@ -1,0 +1,20 @@
+{
+  "name": "compass-productivity-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -n api,web -c cyan,magenta \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "python -m uvicorn app.main:app --reload --app-dir backend --host 127.0.0.1 --port 8000",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "test": "npm run test:backend && npm run test:frontend",
+    "test:backend": "python -m pytest backend/tests",
+    "test:frontend": "npm --prefix frontend run test",
+    "check:firebase": "node scripts/check-firebase.mjs",
+    "lint": "npm --prefix frontend run lint",
+    "build": "npm --prefix frontend run build",
+    "install:all": "npm install && npm --prefix frontend install && python -m pip install -r backend/requirements.txt"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
