@@ -10,6 +10,11 @@ class Priority(str, enum.Enum):
     high = "high"
 
 
+class TaskType(str, enum.Enum):
+    standard = "standard"
+    spike = "spike"
+
+
 class UserRead(BaseModel):
     id: str
     email: EmailStr
@@ -54,6 +59,51 @@ class CourseRead(CourseBase):
     created_at: datetime
 
 
+class ProjectCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=150)
+
+
+class ProjectUpdate(ProjectCreate):
+    pass
+
+
+class ProjectRead(ProjectCreate):
+    id: str
+    user_id: str
+    created_at: datetime
+
+
+class MilestoneCreate(BaseModel):
+    project_id: str
+    name: str = Field(min_length=1, max_length=150)
+    target_date: date
+
+
+class MilestoneUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=150)
+    target_date: date | None = None
+
+    @model_validator(mode="after")
+    def validate_change(self) -> "MilestoneUpdate":
+        if self.name is None and self.target_date is None:
+            raise ValueError("A milestone name or target date is required")
+        return self
+
+
+class MilestoneRead(BaseModel):
+    id: str
+    user_id: str
+    project_id: str
+    name: str
+    target_date: date | None = None
+    created_at: datetime
+
+
+class MilestoneReorder(BaseModel):
+    project_id: str
+    milestone_ids: list[str] = Field(min_length=2, max_length=100)
+
+
 class TaskBase(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     description: str = ""
@@ -62,6 +112,10 @@ class TaskBase(BaseModel):
     due_date: datetime | None = None
     scheduled_start_time: datetime | None = None
     course_id: str | None = None
+    project_id: str | None = None
+    milestone_id: str | None = None
+    blocked_by_task_ids: list[str] = Field(default_factory=list, max_length=50)
+    task_type: TaskType = TaskType.standard
     is_completed: bool = False
     is_routine: bool = False
 
@@ -78,6 +132,10 @@ class TaskUpdate(BaseModel):
     due_date: datetime | None = None
     scheduled_start_time: datetime | None = None
     course_id: str | None = None
+    project_id: str | None = None
+    milestone_id: str | None = None
+    blocked_by_task_ids: list[str] | None = Field(default=None, max_length=50)
+    task_type: TaskType | None = None
     is_completed: bool | None = None
 
 
@@ -86,6 +144,8 @@ class TaskRead(TaskBase):
     user_id: str
     created_at: datetime
     google_event_id: str | None = None
+    spike_journal_id: str | None = None
+    is_blocked: bool = False
 
 
 class RoutineRequest(BaseModel):
@@ -162,6 +222,11 @@ class GoogleStatus(BaseModel):
     configured: bool
     connected: bool
     authorization_url: str | None = None
+
+
+class GoogleCallback(BaseModel):
+    code: str = Field(min_length=1)
+    state: str = Field(min_length=1)
 
 
 class GoogleSyncResult(BaseModel):

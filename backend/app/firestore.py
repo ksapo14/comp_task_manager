@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import enum
 import uuid
 from datetime import date, datetime, time, timezone
@@ -68,6 +70,9 @@ class FirestoreREST:
     def __init__(self, token: str, user_id: str):
         self.token = token
         self.user_id = user_id
+        self.database_path = (
+            f"projects/{settings.vite_firebase_project_id}/databases/(default)"
+        )
         if settings.firestore_emulator_host:
             self.base_url = (
                 f"http://{settings.firestore_emulator_host}/v1/projects/"
@@ -94,6 +99,12 @@ class FirestoreREST:
         if document_id:
             path += f"/{quote(document_id, safe='')}"
         return f"{self.base_url}/{path}"
+
+    def document_name(self, collection: str, document_id: str) -> str:
+        return (
+            f"{self.database_path}/documents/users/{self.user_id}/"
+            f"{collection}/{document_id}"
+        )
 
     async def request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
         try:
@@ -184,3 +195,29 @@ class FirestoreREST:
             return False
         await self.request("DELETE", self.document_url(collection, document_id))
         return True
+
+    async def batch(
+        self,
+        sets: list[tuple[str, str, dict[str, Any]]] | None = None,
+        deletes: list[tuple[str, str]] | None = None,
+    ) -> None:
+        writes = [
+            {
+                "update": {
+                    "name": self.document_name(collection, document_id),
+                    "fields": encode_fields(data),
+                }
+            }
+            for collection, document_id, data in sets or []
+        ]
+        writes.extend(
+            {
+                "delete": self.document_name(collection, document_id),
+            }
+            for collection, document_id in deletes or []
+        )
+        if not writes:
+            return
+        if len(writes) > 500:
+            raise HTTPException(status_code=409, detail="Too many related records")
+        await self.request("POST", f"{self.base_url}:commit", json={"writes": writes})

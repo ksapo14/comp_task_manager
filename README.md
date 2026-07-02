@@ -35,4 +35,11 @@ npm run lint
 npm run build
 ```
 
-Google Calendar is optional. Add its three existing `GOOGLE_*` variables after Firebase is working.
+Google Calendar is optional. Add the `GOOGLE_*` variables and
+`OAUTH_STATE_SECRET` from `.env.example` after Firebase is working.
+
+## Deployment
+
+Use Vercel for the React frontend and Cloud Run for the containerized FastAPI
+backend. Firebase remains the authentication and database provider, so no
+Supabase migration is needed. Follow [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).

@@ -1,5 +1,8 @@
 from datetime import datetime, timezone
 
+import pytest
+from fastapi import HTTPException
+
 from app.routers import google
 from app.schemas import TaskRead
 
@@ -68,8 +71,6 @@ def credentials():
         "token": "token",
         "refresh_token": "refresh",
         "token_uri": "https://oauth2.googleapis.com/token",
-        "client_id": "client",
-        "client_secret": "secret",
         "scopes": ["calendar"],
     }
 
@@ -102,9 +103,25 @@ def test_new_events_use_a_stable_google_id(monkeypatch):
     monkeypatch.setattr(google, "Credentials", FakeCredentials)
     monkeypatch.setattr(google, "build", lambda *_args, **_kwargs: service)
 
-    _, linked, _, pushed = google.run_google_sync(credentials(), [task()])
+    _, linked, refreshed, pushed = google.run_google_sync(credentials(), [task()])
 
     expected_id = google.google_event_id("task-1")
     assert service.event_resource.inserted[0]["id"] == expected_id
     assert linked == [("task-1", expected_id)]
     assert pushed == 1
+    assert "client_id" not in refreshed
+    assert "client_secret" not in refreshed
+
+
+def test_oauth_state_is_user_bound_and_expires(monkeypatch):
+    monkeypatch.setattr(google.settings, "oauth_state_secret", "test-state-secret")
+    current_time = google.time.time()
+    state = google.create_oauth_state("user-1")
+
+    google.verify_oauth_state(state, "user-1")
+    with pytest.raises(HTTPException, match="Invalid or expired OAuth state"):
+        google.verify_oauth_state(state, "user-2")
+
+    monkeypatch.setattr(google.time, "time", lambda: current_time + 601)
+    with pytest.raises(HTTPException, match="Invalid or expired OAuth state"):
+        google.verify_oauth_state(state, "user-1")

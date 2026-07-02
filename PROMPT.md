@@ -89,6 +89,20 @@ and computationally heavy students.
      including syntax-highlighted code blocks so CS students can log bugs,
      terminal snippets, and algorithms.
 
+7. Technical Project Planner & Roadmapping
+   - Milestone Hierarchy: Allow users to group granular tasks under broader
+     "Projects" or "Milestones" (e.g., "Project: Compiler Lab 2" -> "Milestone:
+     Lexer Implementation").
+   - Task Dependencies: Implement a "Blocked By" relational feature where a task
+     can be marked as dependent on the completion of another task. The UI must
+     visually reflect this locked state.
+   - Smart Auto-Scheduling Integration: The auto-scheduler must respect task
+     dependencies; blocked tasks cannot be automatically placed onto the
+     calendar until their prerequisites are marked complete.
+   - Developer "Spikes": Introduce a specific task type for research/prototyping
+     that creates a direct link to a dedicated section in the Developer Journal
+     for architectural sketching and API documentation logging.
+
 ---
 
 ### Database Schema Guidelines (PostgreSQL)

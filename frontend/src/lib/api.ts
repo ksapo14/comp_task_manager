@@ -74,7 +74,9 @@ function writeCache(cacheKey: string, data: unknown) {
 
 function affectedResources(path: string): string[] {
   const resource = path.split("?")[0].split("/").filter(Boolean)[0];
-  if (resource === "tasks") return ["tasks", "calendar"];
+  if (resource === "tasks") return ["tasks", "calendar", "journals"];
+  if (resource === "projects") return ["projects", "milestones", "tasks"];
+  if (resource === "milestones") return ["milestones", "tasks"];
   if (resource === "courses") return ["courses", "calendar"];
   if (resource === "calendar") return ["tasks", "calendar"];
   if (resource === "google") return ["google", "calendar"];

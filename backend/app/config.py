@@ -13,7 +13,8 @@ class Settings(BaseSettings):
     firestore_emulator_host: str = ""
     google_client_id: str = ""
     google_client_secret: str = ""
-    google_redirect_uri: str = "http://localhost:8000/api/google/callback"
+    google_redirect_uri: str = "http://localhost:5173/settings"
+    oauth_state_secret: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

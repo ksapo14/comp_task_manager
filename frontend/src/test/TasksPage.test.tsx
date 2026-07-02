@@ -8,6 +8,12 @@ const task: Task = {
   id: "task-1",
   user_id: "user-1",
   course_id: null,
+  project_id: null,
+  milestone_id: null,
+  blocked_by_task_ids: [],
+  task_type: "standard",
+  spike_journal_id: null,
+  is_blocked: false,
   title: "Original task",
   description: "Initial notes",
   duration_minutes: 45,
@@ -22,7 +28,11 @@ const task: Task = {
 function taskFetchMock() {
   return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
-    if (url.endsWith("/api/courses")) {
+    if (
+      url.endsWith("/api/courses")
+      || url.endsWith("/api/projects")
+      || url.endsWith("/api/milestones")
+    ) {
       return new Response(JSON.stringify([]), { status: 200 });
     }
     if (url.endsWith("/api/tasks") && !init?.method) {

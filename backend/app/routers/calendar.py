@@ -4,6 +4,7 @@ from fastapi import APIRouter
 
 from ..dependencies import CurrentUser, Store
 from ..profile import ensure_profile
+from ..roadmap import apply_blocked_state
 from ..scheduler import ensure_utc, recurring_course_blocks, schedule_tasks
 from ..schemas import (
     CalendarBlock,
@@ -29,9 +30,9 @@ async def calendar_blocks(
     courses = [
         CourseRead.model_validate(item) for item in await store.list("courses")
     ]
-    tasks = [
-        TaskRead.model_validate(item) for item in await store.list("tasks")
-    ]
+    tasks = apply_blocked_state(
+        [TaskRead.model_validate(item) for item in await store.list("tasks")]
+    )
     events = await store.list("external_events")
     blocks = [
         CalendarBlock(
@@ -60,6 +61,7 @@ async def calendar_blocks(
         for task in tasks
         if task.scheduled_start_time
         and not task.is_completed
+        and not task.is_blocked
         and ensure_utc(task.scheduled_start_time) < range_end
         and ensure_utc(task.scheduled_start_time)
         + timedelta(minutes=task.duration_minutes)
@@ -95,13 +97,22 @@ async def auto_schedule(
     courses = [
         CourseRead.model_validate(item) for item in await store.list("courses")
     ]
-    tasks = [
-        TaskRead.model_validate(item) for item in await store.list("tasks")
+    tasks = apply_blocked_state(
+        [TaskRead.model_validate(item) for item in await store.list("tasks")]
+    )
+    blocked_ids = [
+        task.id
+        for task in tasks
+        if not task.scheduled_start_time
+        and not task.is_completed
+        and task.is_blocked
     ]
     unscheduled = [
         task
         for task in tasks
-        if not task.scheduled_start_time and not task.is_completed
+        if not task.scheduled_start_time
+        and not task.is_completed
+        and not task.is_blocked
     ]
     scheduled_tasks = [
         task
@@ -151,4 +162,7 @@ async def auto_schedule(
             task.id,
             {"scheduled_start_time": task.scheduled_start_time},
         )
-    return ScheduleResult(scheduled=scheduled, unscheduled_task_ids=missed)
+    return ScheduleResult(
+        scheduled=scheduled,
+        unscheduled_task_ids=[*blocked_ids, *missed],
+    )

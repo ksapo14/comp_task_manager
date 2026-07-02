@@ -1,10 +1,16 @@
 import { useEffect } from "react";
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react";
+import type {
+  ButtonHTMLAttributes,
+  CSSProperties,
+  InputHTMLAttributes,
+  ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
 
 export function Button({
   className = "",
   variant = "primary",
+  children,
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: "primary" | "secondary" | "ghost" | "danger";
@@ -18,16 +24,20 @@ export function Button({
   };
   return (
     <button
-      className={`interactive-button inline-flex h-10 items-center justify-center gap-2 rounded-xl px-4 text-sm font-medium transition disabled:pointer-events-none disabled:opacity-50 ${variants[variant]} ${className}`}
+      className={`interactive-button relative inline-flex h-10 items-center justify-center gap-2 overflow-hidden rounded-xl px-4 text-sm font-medium disabled:pointer-events-none disabled:opacity-50 ${variants[variant]} ${className}`}
       {...props}
-    />
+    >
+      <span className="button-content relative z-10 inline-flex items-center justify-center gap-2">
+        {children}
+      </span>
+    </button>
   );
 }
 
 export function Input({ className = "", ...props }: InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
-      className={`h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition placeholder:text-zinc-400 focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:focus:border-zinc-400 ${className}`}
+      className={`motion-input h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition placeholder:text-zinc-400 focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:focus:border-zinc-400 ${className}`}
       {...props}
     />
   );
@@ -36,12 +46,19 @@ export function Input({ className = "", ...props }: InputHTMLAttributes<HTMLInpu
 export function Card({
   children,
   className = "",
+  enterIndex,
 }: {
   children: ReactNode;
   className?: string;
+  enterIndex?: number;
 }) {
   return (
     <section
+      style={
+        enterIndex === undefined
+          ? undefined
+          : ({ "--enter-delay": `${enterIndex * 70}ms` } as CSSProperties)
+      }
       className={`surface-card rounded-2xl border border-zinc-200/80 bg-white p-5 shadow-soft dark:border-zinc-800 dark:bg-zinc-900 ${className}`}
     >
       {children}
@@ -57,6 +74,105 @@ export function Skeleton({
   return <div aria-hidden="true" className={`skeleton rounded-lg ${className}`} />;
 }
 
+export function Spinner({ className = "" }: { className?: string }) {
+  return (
+    <span role="status" aria-label="Working" className={`activity-orb ${className}`}>
+      <span />
+      <span />
+      <span />
+    </span>
+  );
+}
+
+export function AmbientLoader({
+  label = "Preparing your workspace",
+  className = "",
+}: {
+  label?: string;
+  className?: string;
+}) {
+  return (
+    <div
+      role="status"
+      aria-label={label}
+      className={`ambient-loader flex flex-col items-center gap-5 ${className}`}
+    >
+      <span className="ambient-loader-orbit" aria-hidden="true">
+        <span className="ambient-loader-core" />
+        <span className="ambient-loader-satellite" />
+      </span>
+      <span className="shimmer-text text-xs font-semibold uppercase tracking-[0.22em]">
+        {label}
+      </span>
+    </div>
+  );
+}
+
+export function LiveStatus({
+  label,
+  tone = "teal",
+}: {
+  label: string;
+  tone?: "teal" | "amber" | "rose";
+}) {
+  return (
+    <span className={`live-status live-status-${tone}`}>
+      <span
+        aria-hidden="true"
+        className="live-status-dot"
+      />
+      {label}
+    </span>
+  );
+}
+
+export function Stagger({
+  children,
+  className = "",
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={`stagger-children ${className}`}>
+      {children}
+    </div>
+  );
+}
+
+export function ProgressRing({
+  value,
+  label,
+}: {
+  value: number;
+  label: string;
+}) {
+  const safeValue = Math.max(0, Math.min(100, value));
+  return (
+    <span
+      className="progress-ring"
+      style={{ "--progress": `${safeValue * 3.6}deg` } as CSSProperties}
+      role="img"
+      aria-label={`${label}: ${Math.round(safeValue)}%`}
+    >
+      <span>
+        <strong>{Math.round(safeValue)}%</strong>
+        <small>{label}</small>
+      </span>
+    </span>
+  );
+}
+
+export function ActivityPulse({ className = "" }: { className?: string }) {
+  return (
+    <span aria-hidden="true" className={`activity-pulse ${className}`}>
+      <span />
+      <span />
+      <span />
+    </span>
+  );
+}
+
 export function PageSkeleton() {
   return (
     <div className="animate-page-in space-y-7" role="status" aria-label="Loading page">
@@ -65,7 +181,7 @@ export function PageSkeleton() {
         <Skeleton className="h-9 w-72 max-w-full" />
         <Skeleton className="h-4 w-[32rem] max-w-full" />
       </div>
-      <div className="grid gap-5 md:grid-cols-2">
+      <div className="stagger-children grid gap-5 md:grid-cols-2">
         {[0, 1, 2, 3].map((item) => (
           <div key={item} className="rounded-2xl border bg-white p-5 dark:bg-zinc-900">
             <Skeleton className="mb-5 h-5 w-36" />
@@ -114,7 +230,7 @@ export function DetailModal({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="modal-panel w-full max-w-2xl rounded-2xl border border-white/10 bg-white p-6 shadow-2xl dark:bg-zinc-900"
+        className="modal-panel glass-panel w-full max-w-2xl rounded-3xl border border-white/40 bg-white/90 p-6 shadow-2xl dark:border-white/10 dark:bg-zinc-900/90"
       >
         <div className="mb-6 flex items-start justify-between gap-5">
           <div>
@@ -149,8 +265,9 @@ export function PageHeader({
   action?: ReactNode;
 }) {
   return (
-    <header className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-      <div>
+    <header className="page-header-motion mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+      <div className="relative">
+        <span className="page-header-glow" aria-hidden="true" />
         {eyebrow && (
           <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-teal-700 dark:text-teal-400">
             {eyebrow}
@@ -168,8 +285,9 @@ export function PageHeader({
 
 export function EmptyState({ children }: { children: ReactNode }) {
   return (
-    <div className="flex min-h-40 items-center justify-center rounded-xl border border-dashed border-zinc-200 px-6 text-center text-sm text-zinc-500 dark:border-zinc-700">
-      {children}
+    <div className="empty-state-motion relative flex min-h-40 items-center justify-center overflow-hidden rounded-xl border border-dashed border-zinc-200 px-6 text-center text-sm text-zinc-500 dark:border-zinc-700">
+      <span className="empty-state-orb" aria-hidden="true" />
+      <span className="relative">{children}</span>
     </div>
   );
 }

@@ -3,7 +3,9 @@ import {
   CalendarClock,
   Check,
   Circle,
+  FileCode2,
   GripVertical,
+  LockKeyhole,
   Pencil,
   Plus,
   RefreshCw,
@@ -11,8 +13,10 @@ import {
   X,
 } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 
 import {
+  ActivityPulse,
   Button,
   Card,
   DetailModal,
@@ -23,7 +27,14 @@ import {
 } from "../components/ui";
 import { api } from "../lib/api";
 import { useAuth } from "../store/auth";
-import type { Course, Priority, Task } from "../types";
+import type {
+  Course,
+  Milestone,
+  Priority,
+  Project,
+  Task,
+  TaskType,
+} from "../types";
 
 const blankForm = {
   title: "",
@@ -32,11 +43,17 @@ const blankForm = {
   priority: "medium" as Priority,
   due_date: "",
   course_id: "",
+  project_id: "",
+  milestone_id: "",
+  blocked_by_task_ids: [] as string[],
+  task_type: "standard" as TaskType,
 };
 
 export function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(blankForm);
   const [saving, setSaving] = useState(false);
@@ -48,12 +65,16 @@ export function TasksPage() {
 
   async function load() {
     try {
-      const [taskData, courseData] = await Promise.all([
+      const [taskData, courseData, projectData, milestoneData] = await Promise.all([
         api<Task[]>("/tasks"),
         api<Course[]>("/courses"),
+        api<Project[]>("/projects"),
+        api<Milestone[]>("/milestones"),
       ]);
       setTasks(taskData);
       setCourses(courseData);
+      setProjects(projectData);
+      setMilestones(milestoneData);
     } finally {
       setLoading(false);
     }
@@ -73,6 +94,8 @@ export function TasksPage() {
           ...form,
           due_date: form.due_date ? new Date(form.due_date).toISOString() : null,
           course_id: form.course_id || null,
+          project_id: form.project_id || null,
+          milestone_id: form.milestone_id || null,
         },
       });
       setForm(blankForm);
@@ -134,7 +157,7 @@ export function TasksPage() {
 
   function prepareSchedule(taskId: string) {
     const task = backlog.find((item) => item.id === taskId);
-    if (!task) return;
+    if (!task || task.is_blocked) return;
     setTaskToSchedule(task);
     setScheduleTime(nextWorkingTime());
   }
@@ -224,6 +247,54 @@ export function TasksPage() {
                   <option value="high">High</option>
                 </select>
               </div>
+              <div>
+                <label className="field-label">Project</label>
+                <select
+                  className="select-field"
+                  value={form.project_id}
+                  onChange={(event) =>
+                    setForm({
+                      ...form,
+                      project_id: event.target.value,
+                      milestone_id: "",
+                    })
+                  }
+                >
+                  <option value="">No project</option>
+                  {projects.map((project) => (
+                    <option value={project.id} key={project.id}>{project.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="field-label">Milestone</label>
+                <select
+                  className="select-field"
+                  disabled={!form.project_id}
+                  value={form.milestone_id}
+                  onChange={(event) => setForm({ ...form, milestone_id: event.target.value })}
+                >
+                  <option value="">Project level</option>
+                  {milestones
+                    .filter((milestone) => milestone.project_id === form.project_id)
+                    .map((milestone) => (
+                      <option value={milestone.id} key={milestone.id}>{milestone.name}</option>
+                    ))}
+                </select>
+              </div>
+              <div>
+                <label className="field-label">Task type</label>
+                <select
+                  className="select-field"
+                  value={form.task_type}
+                  onChange={(event) =>
+                    setForm({ ...form, task_type: event.target.value as TaskType })
+                  }
+                >
+                  <option value="standard">Standard task</option>
+                  <option value="spike">Developer spike</option>
+                </select>
+              </div>
               <div className="xl:col-span-2">
                 <label className="field-label">Notes</label>
                 <Input
@@ -253,6 +324,32 @@ export function TasksPage() {
                   onChange={(event) => setForm({ ...form, due_date: event.target.value })}
                 />
               </div>
+              <div className="md:col-span-2 xl:col-span-4">
+                <label className="field-label">Blocked by</label>
+                <select
+                  multiple
+                  className="select-field min-h-24"
+                  value={form.blocked_by_task_ids}
+                  onChange={(event) =>
+                    setForm({
+                      ...form,
+                      blocked_by_task_ids: Array.from(
+                        event.target.selectedOptions,
+                        (option) => option.value,
+                      ),
+                    })
+                  }
+                >
+                  {tasks
+                    .filter((task) => !task.is_completed)
+                    .map((task) => (
+                      <option value={task.id} key={task.id}>{task.title}</option>
+                    ))}
+                </select>
+                <p className="mt-1 text-xs text-zinc-400">
+                  Hold Ctrl or Command to select multiple prerequisites.
+                </p>
+              </div>
             </div>
             <div className="mt-5 flex justify-end">
               <Button disabled={saving}>{saving ? "Saving…" : "Add to backlog"}</Button>
@@ -269,6 +366,9 @@ export function TasksPage() {
             subtitle="Backlog ready for auto-scheduling"
             tasks={backlog}
             courses={courses}
+            projects={projects}
+            milestones={milestones}
+            allTasks={tasks}
             onPatch={patchTask}
             onDelete={removeTask}
             draggable
@@ -278,6 +378,9 @@ export function TasksPage() {
             subtitle="Committed to a calendar time"
             tasks={scheduled}
             courses={courses}
+            projects={projects}
+            milestones={milestones}
+            allTasks={tasks}
             onPatch={patchTask}
             onDelete={removeTask}
             onTaskDrop={prepareSchedule}
@@ -342,6 +445,9 @@ function TaskColumn({
   subtitle,
   tasks,
   courses,
+  projects,
+  milestones,
+  allTasks,
   onPatch,
   onDelete,
   draggable = false,
@@ -351,6 +457,9 @@ function TaskColumn({
   subtitle: string;
   tasks: Task[];
   courses: Course[];
+  projects: Project[];
+  milestones: Milestone[];
+  allTasks: Task[];
   onPatch: (id: string, payload: Partial<Task>, minimumDelayMs?: number) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   draggable?: boolean;
@@ -392,9 +501,12 @@ function TaskColumn({
                 task={task}
                 course={courses.find((item) => item.id === task.course_id)}
                 courses={courses}
+                projects={projects}
+                milestones={milestones}
+                allTasks={allTasks}
                 onPatch={onPatch}
                 onDelete={onDelete}
-                draggable={draggable}
+                draggable={draggable && !task.is_blocked}
               />
             ))}
           </div>
@@ -412,6 +524,9 @@ function TaskCard({
   task,
   course,
   courses,
+  projects,
+  milestones,
+  allTasks,
   onPatch,
   onDelete,
   draggable,
@@ -419,6 +534,9 @@ function TaskCard({
   task: Task;
   course?: Course;
   courses: Course[];
+  projects: Project[];
+  milestones: Milestone[];
+  allTasks: Task[];
   onPatch: (id: string, payload: Partial<Task>, minimumDelayMs?: number) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   draggable: boolean;
@@ -434,7 +552,17 @@ function TaskCard({
     priority: task.priority,
     due_date: task.due_date ? task.due_date.slice(0, 16) : "",
     course_id: task.course_id ?? "",
+    project_id: task.project_id ?? "",
+    milestone_id: task.milestone_id ?? "",
+    blocked_by_task_ids: task.blocked_by_task_ids,
+    task_type: task.task_type,
   });
+  const project = projects.find((item) => item.id === task.project_id);
+  const milestone = milestones.find((item) => item.id === task.milestone_id);
+  const blockerNames = task.blocked_by_task_ids
+    .map((id) => allTasks.find((item) => item.id === id))
+    .filter((item): item is Task => Boolean(item))
+    .map((item) => item.title);
 
   async function save(event: FormEvent) {
     event.preventDefault();
@@ -447,6 +575,10 @@ function TaskCard({
         priority: editForm.priority,
         due_date: editForm.due_date ? new Date(editForm.due_date).toISOString() : null,
         course_id: editForm.course_id || null,
+        project_id: editForm.project_id || null,
+        milestone_id: editForm.milestone_id || null,
+        blocked_by_task_ids: editForm.blocked_by_task_ids,
+        task_type: editForm.task_type,
       });
       setEditing(false);
     } finally {
@@ -478,19 +610,23 @@ function TaskCard({
       }}
       className={`group relative overflow-hidden rounded-xl border p-4 transition duration-200 hover:-translate-y-0.5 hover:border-zinc-300 hover:shadow-sm dark:hover:border-zinc-600 ${
         draggable ? "cursor-grab active:cursor-grabbing" : ""
-      }`}
+      } ${task.is_blocked ? "border-amber-200 bg-amber-50/30 dark:border-amber-900/60 dark:bg-amber-950/10" : ""}`}
     >
       {completing && (
         <div className="absolute inset-0 z-20 grid place-items-center overflow-hidden bg-emerald-50/90 text-emerald-800 backdrop-blur-[2px] dark:bg-emerald-950/85 dark:text-emerald-200">
           <span className="completion-wash absolute inset-0 bg-emerald-100/80 dark:bg-emerald-900/60" />
           <span className="relative flex items-center gap-2 text-sm font-semibold">
-            <span className="h-4 w-4 animate-spin rounded-full border-2 border-emerald-300 border-t-emerald-700 dark:border-emerald-700 dark:border-t-emerald-200" />
+            <ActivityPulse />
             Completing…
           </span>
         </div>
       )}
       <div className="flex gap-3">
-        {draggable && <GripVertical size={17} className="mt-0.5 shrink-0 text-zinc-300" />}
+        {draggable ? (
+          <GripVertical size={17} className="mt-0.5 shrink-0 text-zinc-300" />
+        ) : task.is_blocked ? (
+          <LockKeyhole size={16} className="mt-0.5 shrink-0 text-amber-600" />
+        ) : null}
         <button
           onClick={complete}
           disabled={completing}
@@ -520,6 +656,16 @@ function TaskCard({
                 >
                   {task.priority}
                 </span>
+                {task.task_type === "spike" && (
+                  <span className="rounded-full bg-teal-50 px-2 py-0.5 text-[10px] font-semibold uppercase text-teal-700 dark:bg-teal-950/40 dark:text-teal-300">
+                    spike
+                  </span>
+                )}
+                {task.is_blocked && (
+                  <span className="text-[10px] font-semibold uppercase text-amber-700 dark:text-amber-400">
+                    blocked
+                  </span>
+                )}
               </span>
               {task.description && (
                 <span className="mt-1 block truncate text-xs text-zinc-500">
@@ -537,6 +683,9 @@ function TaskCard({
             </span>
             {task.due_date && <span>Due {format(new Date(task.due_date), "MMM d")}</span>}
             {course && <span style={{ color: course.color }}>{course.code}</span>}
+            {task.project_id && (
+              <span>{projects.find((project) => project.id === task.project_id)?.name}</span>
+            )}
           </div>
         </div>
         <div className="flex gap-1 opacity-100 transition sm:opacity-0 sm:group-hover:opacity-100">
@@ -629,6 +778,75 @@ function TaskCard({
                   </option>
                 ))}
               </select>
+              <select
+                className="select-field"
+                value={editForm.project_id}
+                onChange={(event) =>
+                  setEditForm({
+                    ...editForm,
+                    project_id: event.target.value,
+                    milestone_id: "",
+                  })
+                }
+              >
+                <option value="">No project</option>
+                {projects.map((project) => (
+                  <option key={project.id} value={project.id}>{project.name}</option>
+                ))}
+              </select>
+              <select
+                className="select-field"
+                disabled={!editForm.project_id}
+                value={editForm.milestone_id}
+                onChange={(event) =>
+                  setEditForm({ ...editForm, milestone_id: event.target.value })
+                }
+              >
+                <option value="">Project level</option>
+                {milestones
+                  .filter((milestone) => milestone.project_id === editForm.project_id)
+                  .map((milestone) => (
+                    <option key={milestone.id} value={milestone.id}>{milestone.name}</option>
+                  ))}
+              </select>
+              <select
+                className="select-field"
+                value={editForm.task_type}
+                onChange={(event) =>
+                  setEditForm({
+                    ...editForm,
+                    task_type: event.target.value as TaskType,
+                  })
+                }
+              >
+                <option value="standard">Standard task</option>
+                <option value="spike">Developer spike</option>
+              </select>
+              <div className="sm:col-span-2">
+                <label className="field-label">Blocked by</label>
+                <select
+                  multiple
+                  className="select-field min-h-24"
+                  value={editForm.blocked_by_task_ids}
+                  onChange={(event) =>
+                    setEditForm({
+                      ...editForm,
+                      blocked_by_task_ids: Array.from(
+                        event.target.selectedOptions,
+                        (option) => option.value,
+                      ),
+                    })
+                  }
+                >
+                  {allTasks
+                    .filter((candidate) => candidate.id !== task.id)
+                    .map((candidate) => (
+                      <option key={candidate.id} value={candidate.id}>
+                        {candidate.title}{candidate.is_completed ? " (complete)" : ""}
+                      </option>
+                    ))}
+                </select>
+              </div>
               <div className="flex justify-end gap-2 sm:col-span-2">
                 <Button type="button" variant="ghost" onClick={() => setEditing(false)}>
                   Cancel
@@ -648,8 +866,19 @@ function TaskCard({
                 <p><span className="block text-xs font-semibold uppercase tracking-wider text-zinc-400">Course</span><span className="mt-1 block text-zinc-800 dark:text-zinc-200">{course?.name ?? "None"}</span></p>
                 <p><span className="block text-xs font-semibold uppercase tracking-wider text-zinc-400">Due</span><span className="mt-1 block text-zinc-800 dark:text-zinc-200">{task.due_date ? format(new Date(task.due_date), "PPp") : "No deadline"}</span></p>
                 <p><span className="block text-xs font-semibold uppercase tracking-wider text-zinc-400">Schedule</span><span className="mt-1 block text-zinc-800 dark:text-zinc-200">{task.scheduled_start_time ? format(new Date(task.scheduled_start_time), "PPp") : "Backlog"}</span></p>
+                <p><span className="block text-xs font-semibold uppercase tracking-wider text-zinc-400">Roadmap</span><span className="mt-1 block text-zinc-800 dark:text-zinc-200">{milestone?.name ?? project?.name ?? "None"}</span></p>
+                <p><span className="block text-xs font-semibold uppercase tracking-wider text-zinc-400">Blocked by</span><span className="mt-1 block text-zinc-800 dark:text-zinc-200">{blockerNames.join(", ") || "Nothing"}</span></p>
               </div>
-              <div className="mt-6 flex justify-end">
+              <div className="mt-6 flex justify-end gap-2">
+                {task.task_type === "spike" && task.spike_journal_id && (
+                  <Link
+                    to={`/journal?entry=${task.spike_journal_id}`}
+                    className="inline-flex h-10 items-center gap-2 rounded-xl border px-4 text-sm font-medium"
+                  >
+                    <FileCode2 size={15} />
+                    Open spike journal
+                  </Link>
+                )}
                 <Button onClick={() => setEditing(true)}>
                   <Pencil size={15} />
                   Edit task

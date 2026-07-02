@@ -3,6 +3,7 @@ import { FilePlus2, Save, Trash2 } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
+import { useSearchParams } from "react-router-dom";
 
 import { Button, Card, EmptyState, Input, PageHeader } from "../components/ui";
 import { api } from "../lib/api";
@@ -19,6 +20,7 @@ def insight():
 `;
 
 export function JournalPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [entries, setEntries] = useState<Journal[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -39,7 +41,11 @@ export function JournalPage() {
   }
 
   useEffect(() => {
-    void load();
+    void load().then((journalData) => {
+      const requested = searchParams.get("entry");
+      const entry = journalData.find((item) => item.id === requested);
+      if (entry) selectEntry(entry);
+    });
   }, []);
 
   function selectEntry(entry: Journal) {
@@ -47,6 +53,7 @@ export function JournalPage() {
     setTitle(entry.title);
     setContent(entry.content_markdown);
     setCourseId(entry.course_id ?? "");
+    setSearchParams({ entry: entry.id }, { replace: true });
   }
 
   function newEntry() {
@@ -54,6 +61,7 @@ export function JournalPage() {
     setTitle("");
     setContent(starter);
     setCourseId("");
+    setSearchParams({}, { replace: true });
   }
 
   async function save(event: FormEvent) {
@@ -150,4 +158,3 @@ export function JournalPage() {
     </>
   );
 }
-

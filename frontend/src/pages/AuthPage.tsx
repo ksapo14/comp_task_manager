@@ -1,7 +1,7 @@
 import { ArrowRight, Braces, CalendarCheck2, TimerReset } from "lucide-react";
 import { FormEvent, useState } from "react";
 
-import { Button, Input } from "../components/ui";
+import { ActivityPulse, Button, Input, LiveStatus } from "../components/ui";
 import { useAuth } from "../store/auth";
 
 export function AuthPage() {
@@ -26,29 +26,30 @@ export function AuthPage() {
   }
 
   return (
-    <div className="grid min-h-screen lg:grid-cols-[1.05fr_.95fr]">
-      <section className="relative hidden overflow-hidden bg-zinc-950 p-12 text-white lg:flex lg:flex-col">
-        <div className="absolute -right-40 -top-40 h-96 w-96 rounded-full bg-teal-500/10 blur-3xl" />
+    <div className="auth-stage grid min-h-screen overflow-hidden lg:grid-cols-[1.05fr_.95fr]">
+      <section className="auth-story relative hidden overflow-hidden bg-zinc-950 p-12 text-white lg:flex lg:flex-col">
+        <div className="auth-mesh" aria-hidden="true" />
+        <div className="auth-orbit auth-orbit-one" aria-hidden="true" />
+        <div className="auth-orbit auth-orbit-two" aria-hidden="true" />
         <div className="flex items-center gap-3">
-          <div className="grid h-10 w-10 place-items-center rounded-xl bg-white text-zinc-950">
+          <div className="brand-mark grid h-10 w-10 place-items-center rounded-xl bg-white text-zinc-950">
+            <span className="brand-mark-aura" aria-hidden="true" />
             <ArrowRight size={19} />
           </div>
           <span className="text-lg font-semibold">Compass</span>
         </div>
         <div className="my-auto max-w-xl">
-          <p className="mb-5 text-sm font-medium uppercase tracking-[0.25em] text-teal-300">
-            Built for deep thinkers
-          </p>
-          <h1 className="text-5xl font-medium leading-[1.08] tracking-tight">
+          <LiveStatus label="Built for deep thinkers" />
+          <h1 className="auth-headline mt-5 text-5xl font-medium leading-[1.08] tracking-tight">
             Less context switching.
             <br />
-            More meaningful work.
+            <span>More meaningful work.</span>
           </h1>
           <p className="mt-6 max-w-md text-base leading-7 text-zinc-400">
             Courses, tasks, focus sessions, and technical notes—organized around the way
             computer science students actually work.
           </p>
-          <div className="mt-12 grid grid-cols-3 gap-3">
+          <div className="stagger-children mt-12 grid grid-cols-3 gap-3">
             {[
               [CalendarCheck2, "Smart scheduling"],
               [TimerReset, "Deep work"],
@@ -56,7 +57,10 @@ export function AuthPage() {
             ].map(([Icon, label]) => {
               const FeatureIcon = Icon as typeof CalendarCheck2;
               return (
-                <div key={label as string} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <div
+                  key={label as string}
+                  className="auth-feature rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur"
+                >
                   <FeatureIcon className="mb-6 text-teal-300" size={20} />
                   <p className="text-xs text-zinc-300">{label as string}</p>
                 </div>
@@ -66,8 +70,9 @@ export function AuthPage() {
         </div>
         <p className="text-xs text-zinc-600">A quiet system for ambitious work.</p>
       </section>
-      <section className="grid place-items-center px-6 py-12">
-        <form onSubmit={submit} className="w-full max-w-sm">
+      <section className="auth-form-stage relative grid place-items-center px-6 py-12">
+        <span className="auth-form-glow" aria-hidden="true" />
+        <form onSubmit={submit} className="auth-form relative w-full max-w-sm">
           <div className="mb-10 lg:hidden">
             <p className="text-xl font-semibold">Compass</p>
           </div>
@@ -113,6 +118,7 @@ export function AuthPage() {
             </p>
           )}
           <Button className="mt-6 w-full" disabled={loading}>
+            {loading && <ActivityPulse />}
             {loading ? "Working…" : mode === "login" ? "Sign in" : "Create account"}
             {!loading && <ArrowRight size={16} />}
           </Button>
@@ -134,4 +140,3 @@ export function AuthPage() {
     </div>
   );
 }
-

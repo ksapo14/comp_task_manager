@@ -13,6 +13,9 @@ interface GoogleStatus {
   authorization_url: string | null;
 }
 
+const GOOGLE_OAUTH_STATE_KEY = "compass:google-oauth-state";
+let googleConnection: Promise<GoogleStatus> | null = null;
+
 export function SettingsPage({
   theme,
   setTheme,
@@ -28,8 +31,78 @@ export function SettingsPage({
   const [message, setMessage] = useState("");
 
   useEffect(() => {
-    void api<GoogleStatus>("/google/status").then(setGoogle);
-  }, []);
+    let active = true;
+
+    async function loadGoogle() {
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get("code");
+      const state = params.get("state");
+      if (code || state) {
+        window.history.replaceState({}, "", window.location.pathname);
+        const expectedState = window.sessionStorage.getItem(GOOGLE_OAUTH_STATE_KEY);
+        window.sessionStorage.removeItem(GOOGLE_OAUTH_STATE_KEY);
+        if (!code || !state || !expectedState || state !== expectedState) {
+          if (active) setMessage("Google authorization could not be verified. Try connecting again.");
+        } else {
+          googleConnection ??= api<GoogleStatus>("/google/callback", {
+            method: "POST",
+            body: { code, state },
+          });
+          try {
+            const connected = await googleConnection;
+            if (active) setGoogle(connected);
+            try {
+              const result = await api<{ pulled: number; pushed: number }>(
+                "/google/sync",
+                { method: "POST" },
+              );
+              if (user) recordGoogleCalendarSync(user.id);
+              window.dispatchEvent(new Event("compass:calendar-synced"));
+              if (active) {
+                setMessage(
+                  `Google Calendar connected. Synced ${result.pulled} external events and ${result.pushed} scheduled tasks.`,
+                );
+              }
+            } catch {
+              if (active) {
+                setMessage("Google Calendar connected, but the first sync failed. Use Sync now to retry.");
+              }
+            }
+            return;
+          } catch (reason) {
+            if (active) {
+              setMessage(reason instanceof Error ? reason.message : "Unable to connect Google Calendar.");
+            }
+          } finally {
+            googleConnection = null;
+          }
+        }
+      } else if (googleConnection) {
+        try {
+          const connected = await googleConnection;
+          if (active) setGoogle(connected);
+          return;
+        } catch (reason) {
+          if (active) {
+            setMessage(reason instanceof Error ? reason.message : "Unable to connect Google Calendar.");
+          }
+        }
+      }
+
+      const status = await api<GoogleStatus>("/google/status");
+      if (active) setGoogle(status);
+    }
+
+    void loadGoogle();
+    return () => {
+      active = false;
+    };
+  }, [user]);
+
+  function rememberGoogleState(url: string) {
+    const state = new URL(url).searchParams.get("state");
+    if (state) window.sessionStorage.setItem(GOOGLE_OAUTH_STATE_KEY, state);
+  }
 
   async function saveHours(event: FormEvent) {
     event.preventDefault();
@@ -139,7 +212,11 @@ export function SettingsPage({
             {google?.connected ? (
               <Button variant="secondary" onClick={sync} disabled={syncing}>{syncing ? "Syncing…" : "Sync now"}</Button>
             ) : google?.authorization_url ? (
-              <a className="inline-flex h-10 items-center justify-center rounded-xl bg-zinc-950 px-4 text-sm font-medium text-white dark:bg-white dark:text-zinc-950" href={google.authorization_url}>
+              <a
+                className="inline-flex h-10 items-center justify-center rounded-xl bg-zinc-950 px-4 text-sm font-medium text-white dark:bg-white dark:text-zinc-950"
+                href={google.authorization_url}
+                onClick={() => rememberGoogleState(google.authorization_url!)}
+              >
                 Connect account
               </a>
             ) : (

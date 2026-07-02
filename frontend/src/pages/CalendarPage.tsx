@@ -13,7 +13,13 @@ import {
   subMonths,
   subWeeks,
 } from "date-fns";
-import { ChevronLeft, ChevronRight, GripVertical, Sparkles } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  GripVertical,
+  LockKeyhole,
+  Sparkles,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
@@ -146,7 +152,7 @@ export function CalendarPage() {
 
   async function scheduleDroppedTask(taskId: string, day: Date) {
     const task = backlog.find((item) => item.id === taskId);
-    if (!task) return;
+    if (!task || task.is_blocked) return;
     const slot = availableSlot(task, day);
     setDropTarget(null);
     setDraggingId(null);
@@ -178,6 +184,8 @@ export function CalendarPage() {
     }
   }
 
+  const schedulableBacklog = backlog.filter((task) => !task.is_blocked);
+
   return (
     <>
       <PageHeader
@@ -185,9 +193,9 @@ export function CalendarPage() {
         title="Protect time for the work."
         description="Classes and external events are locked. Compass fits prioritized tasks into the open space."
         action={
-          <Button onClick={autoSchedule} disabled={scheduling || backlog.length === 0}>
+          <Button onClick={autoSchedule} disabled={scheduling || schedulableBacklog.length === 0}>
             <Sparkles size={16} />
-            {scheduling ? "Scheduling…" : `Schedule backlog (${backlog.length})`}
+            {scheduling ? "Scheduling…" : `Schedule backlog (${schedulableBacklog.length})`}
           </Button>
         }
       />
@@ -206,8 +214,10 @@ export function CalendarPage() {
             {backlog.map((task) => (
               <button
                 key={task.id}
-                draggable
+                draggable={!task.is_blocked}
+                disabled={task.is_blocked}
                 onDragStart={(event) => {
+                  if (task.is_blocked) return;
                   event.dataTransfer.setData("text/task-id", task.id);
                   event.dataTransfer.effectAllowed = "move";
                   setDraggingId(task.id);
@@ -216,14 +226,24 @@ export function CalendarPage() {
                   setDraggingId(null);
                   setDropTarget(null);
                 }}
-                className={`flex min-w-52 items-center gap-2 rounded-xl border bg-white px-3 py-2.5 text-left text-sm shadow-sm transition hover:-translate-y-0.5 hover:border-teal-500 dark:bg-zinc-900 ${
+                className={`flex min-w-52 items-center gap-2 rounded-xl border bg-white px-3 py-2.5 text-left text-sm shadow-sm transition dark:bg-zinc-900 ${
+                  task.is_blocked
+                    ? "cursor-not-allowed border-amber-200 bg-amber-50/40 dark:border-amber-900/60 dark:bg-amber-950/10"
+                    : "hover:-translate-y-0.5 hover:border-teal-500"
+                } ${
                   draggingId === task.id ? "dragging-card" : ""
                 }`}
               >
-                <GripVertical size={15} className="shrink-0 text-zinc-400" />
+                {task.is_blocked ? (
+                  <LockKeyhole size={15} className="shrink-0 text-amber-600" />
+                ) : (
+                  <GripVertical size={15} className="shrink-0 text-zinc-400" />
+                )}
                 <span className="min-w-0">
                   <span className="block truncate font-medium">{task.title}</span>
-                  <span className="block text-xs text-zinc-400">{task.duration_minutes} min</span>
+                  <span className="block text-xs text-zinc-400">
+                    {task.is_blocked ? "Blocked by prerequisite" : `${task.duration_minutes} min`}
+                  </span>
                 </span>
               </button>
             ))}

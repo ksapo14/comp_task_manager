@@ -1,9 +1,28 @@
 import { format, isToday } from "date-fns";
-import { ArrowUpRight, CalendarClock, CheckCircle2, Circle, Clock3 } from "lucide-react";
+import {
+  ArrowRight,
+  ArrowUpRight,
+  CalendarClock,
+  CheckCircle2,
+  Circle,
+  Clock3,
+  Flame,
+  ListTodo,
+  Sparkles,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import type { CSSProperties } from "react";
 import { Link } from "react-router-dom";
 
-import { Card, EmptyState, PageHeader, Skeleton } from "../components/ui";
+import {
+  ActivityPulse,
+  Card,
+  EmptyState,
+  LiveStatus,
+  PageHeader,
+  ProgressRing,
+  Skeleton,
+} from "../components/ui";
 import { api } from "../lib/api";
 import { useAuth } from "../store/auth";
 import type { CalendarBlock, Habit, Task } from "../types";
@@ -47,10 +66,41 @@ export function DashboardPage() {
   const habitProgress = habits.filter((habit) =>
     habit.completion_history.includes(todayKey),
   ).length;
+  const habitPercentage = habits.length ? (habitProgress / habits.length) * 100 : 0;
+  const attentionCount = tasks.filter((task) => task.priority === "high").length;
+  const signalTone = attentionCount > 2 ? "warm" : "calm";
+  const signalCopy = attentionCount > 2
+    ? `${attentionCount} high-priority tasks are competing for attention. Protect one focus block first.`
+    : blocks.length
+      ? `Your day has ${blocks.length} anchored block${blocks.length === 1 ? "" : "s"}. The remaining space is flexible.`
+      : "Your calendar is open. This is a good window to place one meaningful focus block.";
   const greeting = greetingForHour(new Date().getHours());
+  const metrics = [
+    {
+      label: "Open tasks",
+      value: tasks.length,
+      detail: `${attentionCount} high priority`,
+      icon: ListTodo,
+      accent: "teal",
+    },
+    {
+      label: "Today's blocks",
+      value: blocks.length,
+      detail: blocks.length ? "Your day has structure" : "Open for deep work",
+      icon: CalendarClock,
+      accent: "violet",
+    },
+    {
+      label: "Habit rhythm",
+      value: `${habitProgress}/${habits.length}`,
+      detail: habitProgress ? "Momentum is building" : "Ready when you are",
+      icon: Flame,
+      accent: "amber",
+    },
+  ] as const;
 
   return (
-    <>
+    <div className="dashboard-scene">
       <PageHeader
         eyebrow={format(new Date(), "EEEE, MMMM d")}
         title={`${greeting}.`}
@@ -58,20 +108,59 @@ export function DashboardPage() {
         action={
           <Link
             to="/focus"
-            className="inline-flex h-10 items-center gap-2 rounded-xl bg-zinc-950 px-4 text-sm font-medium text-white dark:bg-white dark:text-zinc-950"
+            className="interactive-button group relative inline-flex h-11 items-center gap-2 overflow-hidden rounded-xl bg-zinc-950 px-5 text-sm font-medium text-white shadow-lg shadow-zinc-950/10 dark:bg-white dark:text-zinc-950"
           >
             <Clock3 size={16} />
             Start focus
+            <ArrowRight size={15} className="transition-transform group-hover:translate-x-0.5" />
           </Link>
         }
       />
-      <div className="mb-6 grid gap-4 sm:grid-cols-3">
-        {[
-          ["Open tasks", tasks.length, "Across your backlog"],
-          ["Today's blocks", blocks.length, "Classes and focused work"],
-          ["Habit rhythm", `${habitProgress}/${habits.length}`, "Completed today"],
-        ].map(([label, value, detail]) => (
-          <Card key={label} className="p-5">
+
+      <section
+        className={`daily-signal daily-signal-${signalTone} mb-5 overflow-hidden rounded-3xl border p-5 sm:p-6`}
+        aria-label="Daily workspace signal"
+      >
+        <span className="daily-signal-beam" aria-hidden="true" />
+        <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center">
+          <div className="signal-orb shrink-0" aria-hidden="true">
+            <ActivityPulse />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="mb-2 flex items-center gap-2">
+              <LiveStatus
+                label={loading ? "Reading your workspace" : "Compass signal"}
+                tone={signalTone === "warm" ? "amber" : "teal"}
+              />
+              {!loading && (
+                <span className="text-[10px] uppercase tracking-[0.16em] text-zinc-400">
+                  updated now
+                </span>
+              )}
+            </div>
+            {loading ? (
+              <div className="space-y-2">
+                <Skeleton className="h-5 w-2/3" />
+                <Skeleton className="h-3 w-1/2" />
+              </div>
+            ) : (
+              <>
+                <p className="max-w-3xl text-base font-medium leading-7 text-zinc-800 dark:text-zinc-100">
+                  {signalCopy}
+                </p>
+                <p className="mt-1 text-xs text-zinc-500">
+                  Based on today’s schedule, habits, and task priority.
+                </p>
+              </>
+            )}
+          </div>
+          <Sparkles className="signal-sparkle hidden shrink-0 text-teal-600 sm:block" size={22} />
+        </div>
+      </section>
+
+      <div className="stagger-children mb-6 grid gap-4 sm:grid-cols-3">
+        {metrics.map(({ label, value, detail, icon: Icon, accent }, index) => (
+          <Card key={label} enterIndex={index} className={`metric-card metric-${accent} p-5`}>
             {loading ? (
               <>
                 <Skeleton className="h-3 w-24" />
@@ -79,23 +168,41 @@ export function DashboardPage() {
                 <Skeleton className="mt-2 h-3 w-32" />
               </>
             ) : (
-              <>
-                <p className="text-xs font-medium uppercase tracking-wider text-zinc-400">{label}</p>
-                <p className="mt-3 text-3xl font-semibold tracking-tight">{value}</p>
-                <p className="mt-1 text-xs text-zinc-500">{detail}</p>
-              </>
+              <div className="relative flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-wider text-zinc-400">
+                    {label}
+                  </p>
+                  <p className="metric-value mt-3 text-3xl font-semibold tracking-tight">
+                    {value}
+                  </p>
+                  <p className="mt-1 text-xs text-zinc-500">{detail}</p>
+                </div>
+                {label === "Habit rhythm" ? (
+                  <ProgressRing value={habitPercentage} label="today" />
+                ) : (
+                  <span className="metric-icon grid h-10 w-10 place-items-center rounded-xl">
+                    <Icon size={18} />
+                  </span>
+                )}
+              </div>
             )}
           </Card>
         ))}
       </div>
-      <div className="grid gap-6 xl:grid-cols-[1.3fr_.7fr]">
-        <Card>
+
+      <div className="stagger-children grid gap-6 xl:grid-cols-[1.3fr_.7fr]">
+        <Card enterIndex={3} className="dashboard-panel">
           <div className="mb-5 flex items-center justify-between">
             <div>
               <p className="font-semibold">Today’s timeline</p>
               <p className="text-xs text-zinc-500">Your fixed and scheduled commitments</p>
             </div>
-            <Link to="/calendar" className="text-zinc-400 hover:text-zinc-900 dark:hover:text-white">
+            <Link
+              to="/calendar"
+              aria-label="Open calendar"
+              className="interactive-icon grid h-9 w-9 place-items-center rounded-xl text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
+            >
               <ArrowUpRight size={18} />
             </Link>
           </div>
@@ -104,10 +211,14 @@ export function DashboardPage() {
               {[0, 1, 2].map((item) => <Skeleton key={item} className="h-16 w-full" />)}
             </div>
           ) : blocks.length ? (
-            <div className="space-y-2">
-              {blocks.map((block) => (
-                <div key={block.id} className="flex items-center gap-4 rounded-xl bg-zinc-50 p-3 dark:bg-zinc-800/60">
-                  <span className="h-9 w-1 rounded-full" style={{ backgroundColor: block.color }} />
+            <div className="timeline-list space-y-2">
+              {blocks.map((block, index) => (
+                <div
+                  key={block.id}
+                  style={{ "--item-index": index } as CSSProperties}
+                  className="timeline-entry list-item-motion flex items-center gap-4 rounded-xl border border-transparent bg-zinc-50/80 p-3 dark:bg-zinc-800/60"
+                >
+                  <span className="timeline-rail h-9 w-1 rounded-full" style={{ backgroundColor: block.color }} />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{block.title}</p>
                     <p className="text-xs capitalize text-zinc-400">{block.kind}</p>
@@ -122,7 +233,7 @@ export function DashboardPage() {
             <EmptyState>No blocks scheduled today. Your calendar is open.</EmptyState>
           )}
         </Card>
-        <Card>
+        <Card enterIndex={4} className="dashboard-panel">
           <div className="mb-5 flex items-center gap-3">
             <CalendarClock size={18} />
             <div>
@@ -135,9 +246,13 @@ export function DashboardPage() {
               {[0, 1, 2].map((item) => <Skeleton key={item} className="h-11 w-full" />)}
             </div>
           ) : dueSoon.length ? (
-            <div className="space-y-4">
-              {dueSoon.map((task) => (
-                <div key={task.id} className="flex gap-3">
+            <div className="deadline-list space-y-2">
+              {dueSoon.map((task, index) => (
+                <div
+                  key={task.id}
+                  style={{ "--item-index": index } as CSSProperties}
+                  className="deadline-entry list-item-motion flex gap-3 rounded-xl border border-transparent p-2"
+                >
                   {task.is_completed ? (
                     <CheckCircle2 size={17} className="mt-0.5 text-teal-600" />
                   ) : (
@@ -159,6 +274,6 @@ export function DashboardPage() {
           )}
         </Card>
       </div>
-    </>
+    </div>
   );
 }

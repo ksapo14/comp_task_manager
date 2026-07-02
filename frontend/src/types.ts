@@ -1,4 +1,5 @@
 export type Priority = "low" | "medium" | "high";
+export type TaskType = "standard" | "spike";
 
 export interface User {
   id: string;
@@ -20,10 +21,32 @@ export interface Course {
   created_at: string;
 }
 
+export interface Project {
+  id: string;
+  user_id: string;
+  name: string;
+  created_at: string;
+}
+
+export interface Milestone {
+  id: string;
+  user_id: string;
+  project_id: string;
+  name: string;
+  target_date: string | null;
+  created_at: string;
+}
+
 export interface Task {
   id: string;
   user_id: string;
   course_id: string | null;
+  project_id: string | null;
+  milestone_id: string | null;
+  blocked_by_task_ids: string[];
+  task_type: TaskType;
+  spike_journal_id: string | null;
+  is_blocked: boolean;
   title: string;
   description: string;
   duration_minutes: number;
@@ -77,4 +100,3 @@ export interface AuthResponse {
   token_type: string;
   user: User;
 }
-

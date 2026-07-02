@@ -53,6 +53,12 @@ class FakeStore:
         del values[document_id]
         return True
 
+    async def batch(self, sets=None, deletes=None):
+        for collection, document_id, data in sets or []:
+            self.collections.setdefault(collection, {})[document_id] = copy.deepcopy(data)
+        for collection, document_id in deletes or []:
+            self.collections.get(collection, {}).pop(document_id, None)
+
 
 @pytest.fixture
 def fake_store():
@@ -78,4 +84,3 @@ async def client(fake_store, current_user):
     ) as test_client:
         yield test_client
     app.dependency_overrides.clear()
-

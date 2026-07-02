@@ -1,12 +1,15 @@
 import asyncio
+import base64
+import binascii
 import hashlib
+import hmac
+import json
 import secrets
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import RedirectResponse
+from fastapi import APIRouter, HTTPException
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
@@ -15,14 +18,12 @@ from googleapiclient.errors import HttpError
 
 from ..config import get_settings
 from ..dependencies import CurrentUser, Store
-from ..firestore import FirestoreREST
 from ..profile import ensure_profile
-from ..schemas import GoogleStatus, GoogleSyncResult, TaskRead
+from ..schemas import GoogleCallback, GoogleStatus, GoogleSyncResult, TaskRead
 
 router = APIRouter(prefix="/google", tags=["google-calendar"])
 settings = get_settings()
 SCOPES = ["https://www.googleapis.com/auth/calendar"]
-oauth_states: dict[str, tuple[float, str, str]] = {}
 sync_locks: dict[str, asyncio.Lock] = {}
 
 
@@ -39,7 +40,64 @@ def client_config() -> dict[str, Any]:
 
 
 def configured() -> bool:
-    return bool(settings.google_client_id and settings.google_client_secret)
+    return bool(
+        settings.google_client_id
+        and settings.google_client_secret
+        and settings.oauth_state_secret
+    )
+
+
+def create_oauth_state(user_id: str) -> str:
+    payload = {
+        "exp": int(time.time()) + 600,
+        "nonce": secrets.token_urlsafe(16),
+        "user_id": user_id,
+    }
+    encoded = base64.urlsafe_b64encode(
+        json.dumps(payload, separators=(",", ":")).encode()
+    ).rstrip(b"=")
+    signature = hmac.new(
+        settings.oauth_state_secret.encode(),
+        encoded,
+        hashlib.sha256,
+    ).digest()
+    return (
+        f"{encoded.decode()}."
+        f"{base64.urlsafe_b64encode(signature).rstrip(b'=').decode()}"
+    )
+
+
+def verify_oauth_state(state: str, user_id: str) -> None:
+    try:
+        encoded, supplied_signature = state.split(".", 1)
+        expected_signature = hmac.new(
+            settings.oauth_state_secret.encode(),
+            encoded.encode(),
+            hashlib.sha256,
+        ).digest()
+        signature = base64.urlsafe_b64decode(
+            supplied_signature + "=" * (-len(supplied_signature) % 4)
+        )
+        if not hmac.compare_digest(signature, expected_signature):
+            raise ValueError
+        payload = json.loads(
+            base64.urlsafe_b64decode(
+                encoded + "=" * (-len(encoded) % 4)
+            )
+        )
+        if payload.get("user_id") != user_id or payload.get("exp", 0) < time.time():
+            raise ValueError
+    except (
+        TypeError,
+        ValueError,
+        UnicodeDecodeError,
+        binascii.Error,
+        json.JSONDecodeError,
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid or expired OAuth state",
+        ) from None
 
 
 def credential_dict(credentials: Credentials) -> dict[str, Any]:
@@ -47,8 +105,6 @@ def credential_dict(credentials: Credentials) -> dict[str, Any]:
         "token": credentials.token,
         "refresh_token": credentials.refresh_token,
         "token_uri": credentials.token_uri,
-        "client_id": credentials.client_id,
-        "client_secret": credentials.client_secret,
         "scopes": credentials.scopes,
     }
 
@@ -63,12 +119,7 @@ async def google_status(
     credentials = profile_data.get("google_credentials")
     url = None
     if configured() and not credentials:
-        state = secrets.token_urlsafe(32)
-        now = time.monotonic()
-        for key, value in list(oauth_states.items()):
-            if value[0] <= now:
-                oauth_states.pop(key, None)
-        oauth_states[state] = (now + 600, profile.id, user.token)
+        state = create_oauth_state(profile.id)
         flow = Flow.from_client_config(client_config(), scopes=SCOPES)
         flow.redirect_uri = settings.google_redirect_uri
         url, _ = flow.authorization_url(
@@ -84,31 +135,32 @@ async def google_status(
     )
 
 
-@router.get("/callback", include_in_schema=False)
+@router.post("/callback", response_model=GoogleStatus)
 async def google_callback(
-    code: str = Query(...),
-    state: str = Query(...),
-) -> RedirectResponse:
+    payload: GoogleCallback,
+    user: CurrentUser,
+    store: Store,
+) -> GoogleStatus:
     if not configured():
         raise HTTPException(status_code=503, detail="Google Calendar is not configured")
-    state_data = oauth_states.pop(state, None)
-    if not state_data or state_data[0] <= time.monotonic():
-        raise HTTPException(status_code=400, detail="Invalid or expired OAuth state")
-    _, user_id, firebase_token = state_data
-    flow = Flow.from_client_config(client_config(), scopes=SCOPES, state=state)
+    verify_oauth_state(payload.state, user.id)
+    flow = Flow.from_client_config(
+        client_config(),
+        scopes=SCOPES,
+        state=payload.state,
+    )
     flow.redirect_uri = settings.google_redirect_uri
     try:
-        await asyncio.to_thread(flow.fetch_token, code=code)
+        await asyncio.to_thread(flow.fetch_token, code=payload.code)
     except Exception as exc:
         raise HTTPException(status_code=502, detail="Google authorization failed") from exc
 
-    store = FirestoreREST(token=firebase_token, user_id=user_id)
     profile = await store.get_profile()
     if not profile:
         raise HTTPException(status_code=404, detail="User profile not found")
     profile["google_credentials"] = credential_dict(flow.credentials)
     await store.set_profile(profile)
-    return RedirectResponse(f"{settings.frontend_url}/settings?google=connected")
+    return GoogleStatus(configured=True, connected=True)
 
 
 def parse_google_time(payload: dict[str, str]) -> datetime:
@@ -127,7 +179,16 @@ def run_google_sync(
     credentials_data: dict[str, Any],
     tasks: list[TaskRead],
 ) -> tuple[list, list[tuple[str, str]], dict[str, Any], int]:
-    credentials = Credentials(**credentials_data)
+    credential_values = {
+        key: value
+        for key, value in credentials_data.items()
+        if key not in {"client_id", "client_secret"}
+    }
+    credentials = Credentials(
+        **credential_values,
+        client_id=settings.google_client_id,
+        client_secret=settings.google_client_secret,
+    )
     if credentials.expired and credentials.refresh_token:
         credentials.refresh(Request())
     service = build("calendar", "v3", credentials=credentials, cache_discovery=False)
