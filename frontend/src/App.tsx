@@ -9,6 +9,8 @@ import { useAuth } from "./store/auth";
 
 const AuthPage = lazy(() => import("./pages/AuthPage").then((module) => ({ default: module.AuthPage })));
 const DashboardPage = lazy(() => import("./pages/DashboardPage").then((module) => ({ default: module.DashboardPage })));
+const SchoolDashboardPage = lazy(() => import("./pages/SchoolDashboardPage").then((module) => ({ default: module.SchoolDashboardPage })));
+const SchoolModulePage = lazy(() => import("./pages/SchoolModulePage").then((module) => ({ default: module.SchoolModulePage })));
 const TasksPage = lazy(() => import("./pages/TasksPage").then((module) => ({ default: module.TasksPage })));
 const ProjectsPage = lazy(() => import("./pages/ProjectsPage").then((module) => ({ default: module.ProjectsPage })));
 const CalendarPage = lazy(() => import("./pages/CalendarPage").then((module) => ({ default: module.CalendarPage })));
@@ -94,6 +96,8 @@ export default function App() {
           <Route path="/auth" element={user ? <Navigate to="/" replace /> : <AuthPage />} />
           <Route element={<ProtectedApp />}>
             <Route index element={<DashboardPage />} />
+            <Route path="/dashboard/school" element={<SchoolDashboardPage />} />
+            <Route path="/dashboard/school/:module" element={<SchoolModulePage />} />
             <Route path="/tasks" element={<TasksPage />} />
             <Route path="/projects" element={<ProjectsPage />} />
             <Route path="/projects/:projectId" element={<ProjectsPage />} />

@@ -19,14 +19,16 @@ import {
   GripVertical,
   LockKeyhole,
   Sparkles,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { CSSProperties, DragEvent } from "react";
 
 import {
   Button,
   Card,
   DetailModal,
-  EmptyState,
   PageHeader,
   Skeleton,
 } from "../components/ui";
@@ -35,6 +37,12 @@ import { useAuth } from "../store/auth";
 import type { CalendarBlock, Task } from "../types";
 
 type View = "day" | "week" | "month";
+
+const DEFAULT_HOUR_HEIGHT = 64;
+const MIN_HOUR_HEIGHT = 40;
+const MAX_HOUR_HEIGHT = 96;
+const HOUR_HEIGHT_STEP = 8;
+const DAY_MINUTES = 24 * 60;
 
 function blocksOnDay(blocks: CalendarBlock[], day: Date) {
   const dayStart = new Date(day);
@@ -56,6 +64,7 @@ export function CalendarPage() {
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [selectedBlock, setSelectedBlock] = useState<CalendarBlock | null>(null);
   const [message, setMessage] = useState("");
+  const [hourHeight, setHourHeight] = useState(DEFAULT_HOUR_HEIGHT);
   const user = useAuth((state) => state.user);
 
   const interval = useMemo(() => {
@@ -120,7 +129,11 @@ export function CalendarPage() {
     if (view === "month") setAnchor(direction > 0 ? addMonths(anchor, 1) : subMonths(anchor, 1));
   }
 
-  function availableSlot(task: Task, day: Date): Date | null {
+  function availableSlot(
+    task: Task,
+    day: Date,
+    preferredMinute?: number,
+  ): Date | null {
     if (!user) return null;
     const [startHour, startMinute] = user.preferred_start_time.split(":").map(Number);
     const [endHour, endMinute] = user.preferred_end_time.split(":").map(Number);
@@ -130,6 +143,10 @@ export function CalendarPage() {
     workEnd.setHours(endHour, endMinute, 0, 0);
     if (workEnd <= workStart) workEnd.setDate(workEnd.getDate() + 1);
     const cursor = new Date(workStart);
+    if (preferredMinute !== undefined) {
+      cursor.setHours(0, preferredMinute, 0, 0);
+      if (cursor < workStart) cursor.setTime(workStart.getTime());
+    }
     const now = new Date();
     if (cursor <= now && now < workEnd) {
       cursor.setTime(now.getTime());
@@ -150,10 +167,14 @@ export function CalendarPage() {
     return null;
   }
 
-  async function scheduleDroppedTask(taskId: string, day: Date) {
+  async function scheduleDroppedTask(
+    taskId: string,
+    day: Date,
+    preferredMinute?: number,
+  ) {
     const task = backlog.find((item) => item.id === taskId);
     if (!task || task.is_blocked) return;
-    const slot = availableSlot(task, day);
+    const slot = availableSlot(task, day, preferredMinute);
     setDropTarget(null);
     setDraggingId(null);
     if (!slot) {
@@ -184,7 +205,7 @@ export function CalendarPage() {
     }
   }
 
-  const schedulableBacklog = backlog.filter((task) => !task.is_blocked);
+const schedulableBacklog = backlog.filter((task) => !task.is_blocked);
 
   return (
     <>
@@ -204,7 +225,9 @@ export function CalendarPage() {
           <div className="mb-3 flex items-center justify-between">
             <div>
               <p className="text-sm font-semibold">Unscheduled tasks</p>
-              <p className="text-xs text-zinc-500">Drag a task onto a day to place it.</p>
+              <p className="text-xs text-zinc-500">
+                Drag a task onto a time slot to place it.
+              </p>
             </div>
             <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-medium text-zinc-500 dark:bg-zinc-800">
               {backlog.length}
@@ -250,7 +273,7 @@ export function CalendarPage() {
           </div>
         </Card>
       )}
-      <Card className="overflow-hidden p-0">
+      <Card className="overflow-visible p-0">
         <div className="flex flex-col justify-between gap-4 border-b p-4 sm:flex-row sm:items-center">
           <div className="flex items-center gap-2">
             <button className="rounded-lg p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800" onClick={() => move(-1)} aria-label="Previous">
@@ -270,37 +293,75 @@ export function CalendarPage() {
                   : `${format(interval.start, "MMM d")} – ${format(interval.end, "MMM d, yyyy")}`}
             </p>
           </div>
-          <div className="flex rounded-xl bg-zinc-100 p-1 dark:bg-zinc-800">
-            {(["day", "week", "month"] as View[]).map((item) => (
-              <button
-                key={item}
-                onClick={() => setView(item)}
-                className={`rounded-lg px-3 py-1.5 text-xs font-medium capitalize ${
-                  view === item ? "bg-white shadow-sm dark:bg-zinc-700" : "text-zinc-500"
-                }`}
+          <div className="flex flex-wrap items-center gap-2">
+            {view !== "month" && (
+              <div
+                className="flex rounded-xl bg-zinc-100 p-1 dark:bg-zinc-800"
+                aria-label="Calendar scale"
               >
-                {item}
-              </button>
-            ))}
+                <button
+                  type="button"
+                  onClick={() =>
+                    setHourHeight((current) =>
+                      Math.max(MIN_HOUR_HEIGHT, current - HOUR_HEIGHT_STEP),
+                    )
+                  }
+                  disabled={hourHeight === MIN_HOUR_HEIGHT}
+                  className="grid h-8 w-8 place-items-center rounded-lg text-zinc-500 transition hover:bg-white hover:text-zinc-950 disabled:opacity-30 dark:hover:bg-zinc-700 dark:hover:text-white"
+                  aria-label="Compress calendar"
+                  title="Show more hours"
+                >
+                  <ZoomOut size={15} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setHourHeight((current) =>
+                      Math.min(MAX_HOUR_HEIGHT, current + HOUR_HEIGHT_STEP),
+                    )
+                  }
+                  disabled={hourHeight === MAX_HOUR_HEIGHT}
+                  className="grid h-8 w-8 place-items-center rounded-lg text-zinc-500 transition hover:bg-white hover:text-zinc-950 disabled:opacity-30 dark:hover:bg-zinc-700 dark:hover:text-white"
+                  aria-label="Expand calendar"
+                  title="Show more detail"
+                >
+                  <ZoomIn size={15} />
+                </button>
+              </div>
+            )}
+            <div className="flex rounded-xl bg-zinc-100 p-1 dark:bg-zinc-800">
+              {(["day", "week", "month"] as View[]).map((item) => (
+                <button
+                  key={item}
+                  onClick={() => setView(item)}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-medium capitalize ${
+                    view === item ? "bg-white shadow-sm dark:bg-zinc-700" : "text-zinc-500"
+                  }`}
+                >
+                  {item}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
         {loading ? (
           <CalendarSkeleton view={view} />
-        ) : view === "day" ? (
-          <DayAgenda
-            day={anchor}
+        ) : view !== "month" ? (
+          <CalendarTimeGrid
+            days={view === "day" ? [anchor] : days}
             blocks={blocks}
-            dragging={Boolean(draggingId)}
+            draggingId={draggingId}
             dropTarget={dropTarget}
             onDropTarget={setDropTarget}
             onDropTask={scheduleDroppedTask}
             onSelect={setSelectedBlock}
+            hourHeight={hourHeight}
           />
         ) : (
-          <div className={`grid ${view === "week" ? "grid-cols-1 md:grid-cols-7" : "grid-cols-7"}`}>
+          <div className="grid grid-cols-7">
             {days.map((day) => {
               const dayBlocks = blocksOnDay(blocks, day);
-              const outsideMonth = view === "month" && day.getMonth() !== anchor.getMonth();
+              const outsideMonth = day.getMonth() !== anchor.getMonth();
               return (
                 <div
                   key={day.toISOString()}
@@ -322,12 +383,12 @@ export function CalendarPage() {
                   }}
                   className={`min-h-32 border-b border-r p-2 last:border-r-0 ${
                     outsideMonth ? "bg-zinc-50/80 text-zinc-400 dark:bg-zinc-950/50" : ""
-                  } ${view === "week" ? "md:min-h-[520px]" : "min-h-28"} ${
+                  } min-h-28 ${
                     dropTarget === format(day, "yyyy-MM-dd") ? "drop-target" : ""
                   }`}
                 >
                   <p className={`mb-3 text-center text-xs ${isSameDay(day, new Date()) ? "mx-auto flex min-h-8 min-w-8 w-fit items-center justify-center whitespace-nowrap rounded-full bg-zinc-950 px-2 text-white dark:bg-white dark:text-zinc-950" : "text-zinc-500"}`}>
-                    {view === "week" ? format(day, "EEE d") : format(day, "d")}
+                    {format(day, "d")}
                   </p>
                   <div className="space-y-1.5">
                     {dayBlocks.map((block) => (
@@ -393,60 +454,225 @@ export function CalendarPage() {
   );
 }
 
-function DayAgenda({
-  day,
+interface PositionedBlock {
+  block: CalendarBlock;
+  endMinute: number;
+  lane: number;
+  laneCount: number;
+  startMinute: number;
+}
+
+function positionedBlocksForDay(
+  blocks: CalendarBlock[],
+  day: Date,
+): PositionedBlock[] {
+  const dayStart = new Date(day);
+  dayStart.setHours(0, 0, 0, 0);
+  const dayEnd = addDays(dayStart, 1);
+  const segments = blocksOnDay(blocks, day)
+    .map((block) => {
+      const start = new Date(
+        Math.max(new Date(block.start).getTime(), dayStart.getTime()),
+      );
+      const end = new Date(
+        Math.min(new Date(block.end).getTime(), dayEnd.getTime()),
+      );
+      return {
+        block,
+        startMinute: (start.getTime() - dayStart.getTime()) / 60_000,
+        endMinute: (end.getTime() - dayStart.getTime()) / 60_000,
+      };
+    })
+    .filter((segment) => segment.endMinute > segment.startMinute)
+    .sort(
+      (first, second) =>
+        first.startMinute - second.startMinute ||
+        first.endMinute - second.endMinute,
+    );
+
+  const positioned: PositionedBlock[] = [];
+  let cluster: Array<Omit<PositionedBlock, "laneCount">> = [];
+  let clusterEnd = -1;
+  let laneEnds: number[] = [];
+
+  function finishCluster() {
+    const laneCount = Math.max(1, laneEnds.length);
+    positioned.push(
+      ...cluster.map((segment) => ({ ...segment, laneCount })),
+    );
+    cluster = [];
+    laneEnds = [];
+    clusterEnd = -1;
+  }
+
+  for (const segment of segments) {
+    if (cluster.length && segment.startMinute >= clusterEnd) finishCluster();
+    let lane = laneEnds.findIndex((endMinute) => endMinute <= segment.startMinute);
+    if (lane === -1) {
+      lane = laneEnds.length;
+      laneEnds.push(segment.endMinute);
+    } else {
+      laneEnds[lane] = segment.endMinute;
+    }
+    cluster.push({ ...segment, lane });
+    clusterEnd = Math.max(clusterEnd, segment.endMinute);
+  }
+  if (cluster.length) finishCluster();
+  return positioned;
+}
+
+function CalendarTimeGrid({
+  days,
   blocks,
-  dragging,
+  draggingId,
   dropTarget,
   onDropTarget,
   onDropTask,
   onSelect,
+  hourHeight,
 }: {
-  day: Date;
+  days: Date[];
   blocks: CalendarBlock[];
-  dragging: boolean;
+  draggingId: string | null;
   dropTarget: string | null;
   onDropTarget: (target: string | null) => void;
-  onDropTask: (taskId: string, day: Date) => Promise<void>;
+  onDropTask: (
+    taskId: string,
+    day: Date,
+    preferredMinute?: number,
+  ) => Promise<void>;
   onSelect: (block: CalendarBlock) => void;
+  hourHeight: number;
 }) {
-  const items = blocksOnDay(blocks, day);
-  const dayKey = format(day, "yyyy-MM-dd");
+  const gridHeight = hourHeight * 24;
+  const gridColumns = `4.5rem repeat(${days.length}, minmax(0, 1fr))`;
+
+  function minuteFromDrop(event: DragEvent<HTMLDivElement>) {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const rawMinute = ((event.clientY - bounds.top) / gridHeight) * DAY_MINUTES;
+    return Math.max(0, Math.min(DAY_MINUTES - 15, Math.round(rawMinute / 15) * 15));
+  }
+
   return (
     <div
-      className={`min-h-72 p-5 ${dropTarget === dayKey ? "drop-target" : ""}`}
-      onDragOver={(event) => {
-        if (!dragging) return;
-        event.preventDefault();
-        onDropTarget(dayKey);
-      }}
-      onDragLeave={() => onDropTarget(null)}
-      onDrop={(event) => {
-        event.preventDefault();
-        const taskId = event.dataTransfer.getData("text/task-id");
-        if (taskId) void onDropTask(taskId, day);
-      }}
+      className="calendar-time-scroll"
+      aria-label={`${days.length === 1 ? "Day" : "Week"} hourly calendar`}
     >
-      {items.length ? (
-        <div className="mx-auto max-w-3xl space-y-3">
-          {items.map((block) => (
-            <div key={block.id} className="grid grid-cols-[90px_1fr] gap-4">
-              <p className="pt-4 text-right font-mono text-xs text-zinc-400">
-                {format(new Date(block.start), "h:mm a")}
-              </p>
-              <button type="button" onClick={() => onSelect(block)} className="w-full rounded-xl border-l-4 bg-zinc-50 p-4 text-left transition hover:-translate-y-0.5 hover:shadow-sm dark:bg-zinc-800/60" style={{ borderLeftColor: block.color }}>
-                <p className="font-medium">{block.title}</p>
-                <p className="mt-1 text-xs capitalize text-zinc-500">
-                  {format(new Date(block.start), "h:mm")}–{format(new Date(block.end), "h:mm a")} · {block.kind}
-                  {block.locked && " · locked"}
-                </p>
-              </button>
-            </div>
+      <div
+        className="calendar-time-grid"
+        style={
+          {
+            "--calendar-day-count": days.length,
+            "--calendar-hour-height": `${hourHeight}px`,
+            "--calendar-quarter-height": `${hourHeight / 4}px`,
+            gridTemplateColumns: gridColumns,
+          } as CSSProperties
+        }
+      >
+        <div className="calendar-time-corner" aria-hidden="true">
+          Time
+        </div>
+        {days.map((day) => (
+          <div
+            key={`header-${day.toISOString()}`}
+            className={`calendar-time-day-header ${
+              isSameDay(day, new Date()) ? "is-today" : ""
+            }`}
+          >
+            <span>{format(day, "EEE")}</span>
+            <strong>{format(day, "d")}</strong>
+          </div>
+        ))}
+
+        <div className="calendar-hour-axis" style={{ height: gridHeight }}>
+          {Array.from({ length: 24 }, (_, hour) => (
+            <span
+              key={hour}
+              style={{ top: hour * hourHeight }}
+            >
+              {format(new Date(2026, 0, 1, hour), "h a")}
+            </span>
           ))}
         </div>
-      ) : (
-        <EmptyState>This day is completely open.</EmptyState>
-      )}
+
+        {days.map((day) => {
+          const dayKey = format(day, "yyyy-MM-dd");
+          const positioned = positionedBlocksForDay(blocks, day);
+          const now = new Date();
+          const nowMinute = now.getHours() * 60 + now.getMinutes();
+          return (
+            <div
+              key={day.toISOString()}
+              className={`calendar-time-day-column ${
+                dropTarget === dayKey ? "is-drop-target" : ""
+              }`}
+              style={{ height: gridHeight }}
+              onDragOver={(event) => {
+                if (!draggingId) return;
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "move";
+                onDropTarget(dayKey);
+              }}
+              onDragLeave={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget as Node)) {
+                  onDropTarget(null);
+                }
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                const taskId =
+                  event.dataTransfer.getData("text/task-id") || draggingId;
+                if (taskId) {
+                  void onDropTask(taskId, day, minuteFromDrop(event));
+                }
+              }}
+            >
+              {isSameDay(day, now) && (
+                <span
+                  className="calendar-now-line"
+                  style={{ top: (nowMinute / 60) * hourHeight }}
+                  aria-label={`Current time ${format(now, "h:mm a")}`}
+                />
+              )}
+              {positioned.map(
+                ({ block, startMinute, endMinute, lane, laneCount }) => {
+                  const height = Math.max(
+                    22,
+                    ((endMinute - startMinute) / 60) * hourHeight,
+                  );
+                  return (
+                    <button
+                      key={`${block.id}:${dayKey}`}
+                      type="button"
+                      onClick={() => onSelect(block)}
+                      className={`calendar-grid-event calendar-event-${block.kind}`}
+                      style={
+                        {
+                          top: (startMinute / 60) * hourHeight,
+                          height,
+                          left: `calc(${(lane / laneCount) * 100}% + 3px)`,
+                          width: `calc(${100 / laneCount}% - 6px)`,
+                          borderLeftColor: block.color,
+                        } as CSSProperties
+                      }
+                      title={`${block.title}, ${format(new Date(block.start), "h:mm a")} to ${format(new Date(block.end), "h:mm a")}`}
+                    >
+                      <strong>{block.title}</strong>
+                      {height >= 38 && (
+                        <span>
+                          {format(new Date(block.start), "h:mm")}–
+                          {format(new Date(block.end), "h:mm a")}
+                          {block.locked && " · locked"}
+                        </span>
+                      )}
+                    </button>
+                  );
+                },
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

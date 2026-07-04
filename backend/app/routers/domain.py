@@ -26,6 +26,10 @@ from ..schemas import (
     ProjectRead,
     ProjectUpdate,
     RoutineRequest,
+    SchoolFlashcardDeck,
+    SchoolFocusMatrix,
+    SchoolTimeline,
+    SchoolWorkspaceRead,
     TaskCreate,
     TaskRead,
     TaskType,
@@ -33,6 +37,8 @@ from ..schemas import (
 )
 
 router = APIRouter(tags=["workspace"])
+
+SCHOOL_WORKSPACE_COLLECTION = "school_workspace"
 
 
 def now() -> datetime:
@@ -726,6 +732,99 @@ async def delete_journal(
     if not await store.delete("journals", journal_id):
         raise HTTPException(status_code=404, detail="Journal entry not found")
     return Response(status_code=204)
+
+
+async def school_workspace_document(
+    store: Store,
+    document_id: str,
+    model: type[SchoolFlashcardDeck | SchoolFocusMatrix | SchoolTimeline],
+) -> SchoolFlashcardDeck | SchoolFocusMatrix | SchoolTimeline:
+    item = await store.get(SCHOOL_WORKSPACE_COLLECTION, document_id)
+    return model.model_validate(item or {})
+
+
+@router.get("/school-workspace", response_model=SchoolWorkspaceRead)
+async def get_school_workspace(
+    user: CurrentUser,
+    store: Store,
+) -> SchoolWorkspaceRead:
+    flashcards = await school_workspace_document(store, "flashcards", SchoolFlashcardDeck)
+    focus = await school_workspace_document(store, "focus", SchoolFocusMatrix)
+    timeline = await school_workspace_document(store, "timeline", SchoolTimeline)
+    return SchoolWorkspaceRead(
+        flashcards=flashcards,
+        focus=focus,
+        timeline=timeline,
+    )
+
+
+@router.get("/school-workspace/flashcards", response_model=SchoolFlashcardDeck)
+async def get_school_flashcards(
+    user: CurrentUser,
+    store: Store,
+) -> SchoolFlashcardDeck:
+    item = await school_workspace_document(store, "flashcards", SchoolFlashcardDeck)
+    return SchoolFlashcardDeck.model_validate(item)
+
+
+@router.put("/school-workspace/flashcards", response_model=SchoolFlashcardDeck)
+async def put_school_flashcards(
+    payload: SchoolFlashcardDeck,
+    user: CurrentUser,
+    store: Store,
+) -> SchoolFlashcardDeck:
+    item = await store.set(
+        SCHOOL_WORKSPACE_COLLECTION,
+        "flashcards",
+        payload.model_dump(),
+    )
+    return SchoolFlashcardDeck.model_validate(item)
+
+
+@router.get("/school-workspace/focus", response_model=SchoolFocusMatrix)
+async def get_school_focus(
+    user: CurrentUser,
+    store: Store,
+) -> SchoolFocusMatrix:
+    item = await school_workspace_document(store, "focus", SchoolFocusMatrix)
+    return SchoolFocusMatrix.model_validate(item)
+
+
+@router.put("/school-workspace/focus", response_model=SchoolFocusMatrix)
+async def put_school_focus(
+    payload: SchoolFocusMatrix,
+    user: CurrentUser,
+    store: Store,
+) -> SchoolFocusMatrix:
+    item = await store.set(
+        SCHOOL_WORKSPACE_COLLECTION,
+        "focus",
+        payload.model_dump(),
+    )
+    return SchoolFocusMatrix.model_validate(item)
+
+
+@router.get("/school-workspace/timeline", response_model=SchoolTimeline)
+async def get_school_timeline(
+    user: CurrentUser,
+    store: Store,
+) -> SchoolTimeline:
+    item = await school_workspace_document(store, "timeline", SchoolTimeline)
+    return SchoolTimeline.model_validate(item)
+
+
+@router.put("/school-workspace/timeline", response_model=SchoolTimeline)
+async def put_school_timeline(
+    payload: SchoolTimeline,
+    user: CurrentUser,
+    store: Store,
+) -> SchoolTimeline:
+    item = await store.set(
+        SCHOOL_WORKSPACE_COLLECTION,
+        "timeline",
+        payload.model_dump(),
+    )
+    return SchoolTimeline.model_validate(item)
 
 
 @router.get("/focus-links", response_model=list[FocusLinkRead])

@@ -11,6 +11,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   PanelsTopLeft,
+  School,
   Settings,
   Sparkles,
   X,
@@ -24,6 +25,7 @@ import { LiveStatus } from "./ui";
 
 const navItems = [
   { to: "/", label: "Overview", icon: CircleGauge, end: true },
+  { to: "/dashboard/school", label: "School hub", icon: School },
   { to: "/tasks", label: "Tasks", icon: CheckSquare2 },
   { to: "/projects", label: "Projects", icon: PanelsTopLeft },
   { to: "/calendar", label: "Calendar", icon: CalendarDays },

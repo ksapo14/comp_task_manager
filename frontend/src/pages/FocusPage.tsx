@@ -3,6 +3,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 
+import { EditableClockValue } from "../components/EditableClockValue";
 import { ActivityPulse, Button, Input, Skeleton } from "../components/ui";
 import { api } from "../lib/api";
 import type { FocusLink, Task } from "../types";
@@ -17,14 +18,14 @@ const challenges = [
   "for task in backlog: execute(task)",
 ];
 
-function savedFocusDuration(): number {
+function savedFocusDurationSeconds(): number {
   try {
     const value = Number(window.localStorage.getItem("compass:focus-duration"));
     return Number.isFinite(value) && value >= 1
-      ? Math.min(MAX_FOCUS_MINUTES, Math.round(value))
-      : DEFAULT_FOCUS_MINUTES;
+      ? Math.min(MAX_FOCUS_MINUTES * 60, Math.round(value * 60))
+      : DEFAULT_FOCUS_MINUTES * 60;
   } catch {
-    return DEFAULT_FOCUS_MINUTES;
+    return DEFAULT_FOCUS_MINUTES * 60;
   }
 }
 
@@ -47,10 +48,9 @@ function createAudioContext(): AudioContext | null {
 
 export function FocusPage() {
   const navigate = useNavigate();
-  const [initialDuration] = useState(savedFocusDuration);
-  const [duration, setDuration] = useState(initialDuration);
-  const [seconds, setSeconds] = useState(initialDuration * 60);
-  const [customMinutes, setCustomMinutes] = useState(String(initialDuration));
+  const [initialDurationSeconds] = useState(savedFocusDurationSeconds);
+  const [durationSeconds, setDurationSeconds] = useState(initialDurationSeconds);
+  const [seconds, setSeconds] = useState(initialDurationSeconds);
   const [running, setRunning] = useState(false);
   const [alarming, setAlarming] = useState(false);
   const [challenge, setChallenge] = useState(challenges[0]);
@@ -168,7 +168,9 @@ export function FocusPage() {
     () => tasks.filter((task) => selected.includes(task.id)),
     [selected, tasks],
   );
-  const time = `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+  const displayedMinutes = Math.floor(seconds / 60);
+  const displayedSeconds = seconds % 60;
+  const canEditDuration = !running && !alarming && seconds === durationSeconds;
 
   function begin() {
     if (!audioContext.current) audioContext.current = createAudioContext();
@@ -178,29 +180,31 @@ export function FocusPage() {
     setRunning(true);
   }
 
-  function reset(nextDuration = duration) {
+  function reset(nextDuration = durationSeconds) {
     if (alarming) return;
     setRunning(false);
-    setSeconds(nextDuration * 60);
+    setSeconds(nextDuration);
   }
 
-  function selectDuration(minutes: number) {
-    const nextDuration = Math.min(MAX_FOCUS_MINUTES, Math.max(1, Math.round(minutes)));
-    setDuration(nextDuration);
-    setCustomMinutes(String(nextDuration));
+  function setClockTime(minutes: number, nextSeconds: number) {
+    const nextDuration = Math.min(
+      MAX_FOCUS_MINUTES * 60,
+      Math.max(60, minutes * 60 + nextSeconds),
+    );
+    setDurationSeconds(nextDuration);
     try {
-      window.localStorage.setItem("compass:focus-duration", String(nextDuration));
+      window.localStorage.setItem(
+        "compass:focus-duration",
+        String(nextDuration / 60),
+      );
     } catch {
       // The timer remains functional when storage is disabled.
     }
     reset(nextDuration);
   }
 
-  function applyCustomDuration(event: FormEvent) {
-    event.preventDefault();
-    const minutes = Number(customMinutes);
-    if (!Number.isFinite(minutes) || minutes < 1) return;
-    selectDuration(minutes);
+  function selectDuration(minutes: number) {
+    setClockTime(minutes, 0);
   }
 
   async function completeTask(task: Task) {
@@ -258,7 +262,11 @@ export function FocusPage() {
   }
 
   return createPortal(
-    <div className="focus-stage fixed inset-0 z-[60] overflow-y-auto bg-[#f3f1eb] text-zinc-950 dark:bg-zinc-950 dark:text-white">
+    <div
+      className={`focus-stage fixed inset-0 z-[60] overflow-y-auto bg-[#f3f1eb] text-zinc-950 dark:bg-zinc-950 dark:text-white ${
+        running ? "is-running" : ""
+      }`}
+    >
       <div className="mx-auto flex min-h-screen max-w-7xl flex-col p-5 md:p-10">
         <header className="flex items-center justify-between">
           <div>
@@ -288,15 +296,40 @@ export function FocusPage() {
         )}
         <main className="grid flex-1 items-center gap-10 py-10 lg:grid-cols-[1.2fr_.8fr]">
           <section className="animate-page-in text-center">
-            <p
+            <div
               className={`focus-clock-shell font-mono text-[clamp(5rem,16vw,11rem)] font-medium leading-none tracking-[-0.08em] tabular-nums ${running ? "is-running" : ""}`}
             >
               <span key={seconds} className="focus-clock inline-block">
-                {time}
+                <span className="clock-time-display">
+                  <EditableClockValue
+                    value={displayedMinutes}
+                    min={1}
+                    max={MAX_FOCUS_MINUTES}
+                    disabled={!canEditDuration}
+                    onChange={(minutes) => setClockTime(minutes, displayedSeconds)}
+                    label="Deep work minutes"
+                  />
+                  :
+                  <EditableClockValue
+                    value={displayedSeconds}
+                    max={59}
+                    disabled={!canEditDuration}
+                    onChange={(nextSeconds) =>
+                      setClockTime(displayedMinutes, nextSeconds)
+                    }
+                    label="Deep work seconds"
+                  />
+                </span>
               </span>
-            </p>
+            </div>
             <p className="mt-5 text-sm text-zinc-500">
-              {running ? "Stay with the problem." : seconds === 0 ? "Session complete." : "Ready when you are."}
+              {running
+                ? "Stay with the problem."
+                : seconds === 0
+                  ? "Session complete."
+                  : canEditDuration
+                    ? "Select minutes on the clock to change them."
+                    : "Ready when you are."}
             </p>
             <div className="mt-8 flex justify-center gap-3">
               <button
@@ -316,43 +349,12 @@ export function FocusPage() {
                   key={minutes}
                   disabled={running || alarming}
                   onClick={() => selectDuration(minutes)}
-                  className={`rounded-full px-3 py-1.5 text-xs ${duration === minutes ? "bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300" : "text-zinc-400"}`}
+                  className={`rounded-full px-3 py-1.5 text-xs ${durationSeconds === minutes * 60 ? "bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300" : "text-zinc-400"}`}
                 >
                   {minutes}m
                 </button>
               ))}
             </div>
-            <form
-              onSubmit={applyCustomDuration}
-              className="mx-auto mt-4 flex max-w-xs items-end justify-center gap-2"
-            >
-              <label className="text-left">
-                <span className="field-label">Custom minutes</span>
-                <Input
-                  type="number"
-                  min={1}
-                  max={MAX_FOCUS_MINUTES}
-                  step={1}
-                  disabled={running || alarming}
-                  value={customMinutes}
-                  onChange={(event) => setCustomMinutes(event.target.value)}
-                  aria-label="Custom focus minutes"
-                  className="w-32 text-center font-mono"
-                />
-              </label>
-              <Button
-                variant="secondary"
-                disabled={
-                  running
-                  || alarming
-                  || !Number.isFinite(Number(customMinutes))
-                  || Number(customMinutes) < 1
-                  || Number(customMinutes) > MAX_FOCUS_MINUTES
-                }
-              >
-                Set time
-              </Button>
-            </form>
           </section>
           <section className="space-y-4">
             <div className="focus-panel rounded-3xl border bg-white/70 p-6 shadow-soft backdrop-blur dark:bg-zinc-900/70">

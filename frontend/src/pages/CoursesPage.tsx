@@ -1,5 +1,14 @@
-import { Clock3, MapPin, Plus, Trash2, UserRound, X } from "lucide-react";
+import {
+  CalendarRange,
+  Clock3,
+  MapPin,
+  Plus,
+  Trash2,
+  UserRound,
+  X,
+} from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import {
   Button,
@@ -39,6 +48,7 @@ function parseRule(rule: string) {
 }
 
 export function CoursesPage() {
+  const navigate = useNavigate();
   const [courses, setCourses] = useState<Course[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(blank);
@@ -87,10 +97,19 @@ export function CoursesPage() {
         title="Classes are the anchors."
         description="Recurring class times become locked calendar blocks. The scheduler always works around them."
         action={
-          <Button onClick={() => setShowForm(true)}>
-            <Plus size={16} />
-            Add course
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="secondary"
+              onClick={() => navigate("/dashboard/school/timeline?edit=1")}
+            >
+              <CalendarRange size={16} />
+              Edit syllabus timeline
+            </Button>
+            <Button onClick={() => setShowForm(true)}>
+              <Plus size={16} />
+              Add course
+            </Button>
+          </div>
         }
       />
       {showForm && (
@@ -248,6 +267,19 @@ export function CoursesPage() {
                   {course.location || "Not added"}
                 </p>
               </div>
+            </div>
+            <div className="mt-5 flex justify-end">
+              <Button
+                variant="secondary"
+                onClick={() =>
+                  navigate(
+                    `/dashboard/school/timeline?edit=1&course=${encodeURIComponent(course.code)}`,
+                  )
+                }
+              >
+                <CalendarRange size={16} />
+                Edit {course.code} syllabus timeline
+              </Button>
             </div>
           </DetailModal>
         );

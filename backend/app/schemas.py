@@ -206,6 +206,73 @@ class ScheduleResult(BaseModel):
     unscheduled_task_ids: list[str]
 
 
+class SchoolTaskStatus(str, enum.Enum):
+    todo = "todo"
+    progress = "progress"
+    completed = "completed"
+
+
+class SchoolMilestoneKind(str, enum.Enum):
+    exam = "Exam"
+    project = "Project"
+    deadline = "Deadline"
+
+
+class SchoolFlashcard(BaseModel):
+    id: str = Field(min_length=1, max_length=100)
+    course: str = Field(min_length=1, max_length=100)
+    question: str = Field(min_length=1, max_length=1000)
+    answer: str = Field(min_length=1, max_length=4000)
+
+
+class SchoolFlashcardDeck(BaseModel):
+    cards: list[SchoolFlashcard] = Field(default_factory=list, max_length=200)
+    mastered_count: int = Field(default=0, ge=0)
+    review_count: int = Field(default=0, ge=0)
+
+
+class SchoolFocusTask(BaseModel):
+    id: str = Field(min_length=1, max_length=100)
+    title: str = Field(min_length=1, max_length=200)
+    course: str = Field(default="Independent", max_length=100)
+    status: SchoolTaskStatus = SchoolTaskStatus.todo
+
+
+class SchoolFocusMatrix(BaseModel):
+    tasks: list[SchoolFocusTask] = Field(default_factory=list, max_length=300)
+
+
+class SchoolTimelineMilestone(BaseModel):
+    id: str = Field(min_length=1, max_length=100)
+    title: str = Field(min_length=1, max_length=200)
+    course: str = Field(min_length=1, max_length=100)
+    kind: SchoolMilestoneKind
+    date: datetime
+    detail: str = Field(default="", max_length=2000)
+
+
+class SchoolTimeline(BaseModel):
+    semester_start: datetime | None = None
+    semester_end: datetime | None = None
+    milestones: list[SchoolTimelineMilestone] = Field(default_factory=list, max_length=200)
+
+    @model_validator(mode="after")
+    def validate_semester_dates(self) -> "SchoolTimeline":
+        if (
+            self.semester_start is not None
+            and self.semester_end is not None
+            and self.semester_end <= self.semester_start
+        ):
+            raise ValueError("Semester end must be after semester start")
+        return self
+
+
+class SchoolWorkspaceRead(BaseModel):
+    flashcards: SchoolFlashcardDeck
+    focus: SchoolFocusMatrix
+    timeline: SchoolTimeline
+
+
 class FocusLinkCreate(BaseModel):
     label: str = Field(min_length=1, max_length=100)
     url: HttpUrl
